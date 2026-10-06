@@ -37,6 +37,7 @@ const initialState: AppState = {
   sameNurse: true,
   caregiverId: "c1",
   cityId: "hyd",
+  vitalIds: ["bp"],
   womenOnly: false,
   language: null,
   notifyFamily: false,

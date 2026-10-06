@@ -214,3 +214,11 @@ label { font-size: 14px; font-weight: 600; }
 .kv .k { font-size: 13px; color: var(--muted); }
 
 .city-btn { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 44px; font-size: 15px; align-self: flex-start; }
+
+/* Vitals: choose checks and read about each one */
+.check-item { background: var(--surface); border: 1.5px solid var(--line); border-radius: 14px; }
+.check-item.on { border-color: var(--primary); }
+.check-row { display: flex; align-items: center; gap: 4px; padding: 4px 14px 4px 6px; }
+.check-row input { width: 24px; height: 24px; margin: 10px; accent-color: var(--primary); flex: none; cursor: pointer; }
+.check-name { flex: 1; min-width: 0; min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.check-info { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px 14px; border-top: 1px solid var(--line); font-size: 15px; }

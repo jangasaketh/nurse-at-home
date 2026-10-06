@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useApp } from "@/lib/store";
-import { ARRIVAL_CODE, FAMILY_CONTACT, SAMPLE_VITALS } from "@/lib/data";
+import { ARRIVAL_CODE, FAMILY_CONTACT } from "@/lib/data";
 import { describeBooking } from "@/lib/booking";
 import { Icon, Star } from "./Icon";
 import { BottomBar, Header } from "./ui";
@@ -154,10 +154,10 @@ export function DoneScreen() {
           <h2>Visit record from {b.caregiver.first}</h2>
           <p style={{ fontSize: 15 }}>{b.service.note}</p>
           <div className="grid grid-2" style={{ gap: 10, fontVariantNumeric: "tabular-nums" }}>
-            {SAMPLE_VITALS.map((v) => (
-              <div key={v.k} className="vital">
-                <span className="tiny muted">{v.k}</span>
-                <span className="strong">{v.v}</span>
+            {b.readings.map((v) => (
+              <div key={v.id} className="vital">
+                <span className="tiny muted">{v.name}</span>
+                <span className="strong">{v.sample}</span>
               </div>
             ))}
           </div>

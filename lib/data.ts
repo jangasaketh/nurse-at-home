@@ -113,7 +113,7 @@ export const SERVICES: Service[] = [
     id: "vitals",
     name: "Vitals check",
     short: "Blood pressure, sugar, temperature and oxygen, recorded for your doctor.",
-    price: 150,
+    price: 30, // "from" price. The real price is the total of the checks chosen
     mins: "15 minutes",
     needsPrescription: false,
     nurseOnly: false,
@@ -121,8 +121,8 @@ export const SERVICES: Service[] = [
     nurseBrings: "BP monitor, glucometer, thermometer and pulse oximeter",
     youKeepReady: "Earlier reports, if you have them",
     includes: [
-      "Measures BP, pulse, temperature and oxygen",
-      "Finger-prick blood sugar if needed",
+      "Takes only the checks you choose",
+      "Explains each reading in plain words",
       "Saves the readings to your records",
     ],
     note: "All readings taken and saved below.",
@@ -151,13 +151,14 @@ export type Caregiver = {
   speaks: string[]; // "LOCAL" stands for the main language of the patient's city
   gender: "F" | "M";
   regNo: string; // nursing council registration, or certificate number for a compounder
+  busyAt: string[]; // SAMPLE: arrival times when this person is already booked
 };
 
 export const CAREGIVERS: Caregiver[] = [
-  { id: "c1", name: "Anjali Thomas", first: "Anjali", initials: "AT", qualification: "Registered nurse · GNM", isNurse: true, experience: "8 years", distance: "1.2 km", rating: "4.9", visitCount: "212", speaks: ["LOCAL", "English", "Hindi"], gender: "F", regNo: "48213" },
-  { id: "c2", name: "Mohammed Irfan", first: "Irfan", initials: "MI", qualification: "Registered nurse · B.Sc Nursing", isNurse: true, experience: "5 years", distance: "2.4 km", rating: "4.8", visitCount: "147", speaks: ["LOCAL", "Hindi", "Urdu", "English"], gender: "M", regNo: "51907" },
-  { id: "c3", name: "Sunita Yadav", first: "Sunita", initials: "SY", qualification: "Registered nurse · GNM", isNurse: true, experience: "11 years", distance: "3.1 km", rating: "4.7", visitCount: "389", speaks: ["Hindi", "English"], gender: "F", regNo: "33684" },
-  { id: "c4", name: "Ravi Kumar", first: "Ravi", initials: "RK", qualification: "Compounder · wound-care trained", isNurse: false, experience: "14 years", distance: "0.9 km", rating: "4.6", visitCount: "501", speaks: ["LOCAL", "Hindi"], gender: "M", regNo: "7716" },
+  { id: "c1", name: "Anjali Thomas", first: "Anjali", initials: "AT", qualification: "Registered nurse · GNM", isNurse: true, experience: "8 years", distance: "1.2 km", rating: "4.9", visitCount: "212", speaks: ["LOCAL", "English", "Hindi"], gender: "F", regNo: "48213", busyAt: ["10:00 PM"] },
+  { id: "c2", name: "Mohammed Irfan", first: "Irfan", initials: "MI", qualification: "Registered nurse · B.Sc Nursing", isNurse: true, experience: "5 years", distance: "2.4 km", rating: "4.8", visitCount: "147", speaks: ["LOCAL", "Hindi", "Urdu", "English"], gender: "M", regNo: "51907", busyAt: ["12:00 PM"] },
+  { id: "c3", name: "Sunita Yadav", first: "Sunita", initials: "SY", qualification: "Registered nurse · GNM", isNurse: true, experience: "11 years", distance: "3.1 km", rating: "4.7", visitCount: "389", speaks: ["Hindi", "English"], gender: "F", regNo: "33684", busyAt: ["10:00 PM", "6:00 AM", "within 60 minutes"] },
+  { id: "c4", name: "Ravi Kumar", first: "Ravi", initials: "RK", qualification: "Compounder · wound-care trained", isNurse: false, experience: "14 years", distance: "0.9 km", rating: "4.6", visitCount: "501", speaks: ["LOCAL", "Hindi"], gender: "M", regNo: "7716", busyAt: ["6:00 AM"] },
 ];
 
 // Launch cities. Nurses register with their STATE nursing council, so verification is per state.
@@ -176,6 +177,7 @@ export const VISIT_FEE = 49; // home visit charge per visit, rupees
 // Early-morning and late-night slots are on purpose: insulin before breakfast, night-time injections.
 export const SLOTS = ["6:00 AM", "9:00 AM", "12:00 PM", "4:00 PM", "7:00 PM", "10:00 PM"];
 export const URGENT_SLOT = "within 60 minutes";
+export const URGENT_FEE = 100; // extra charge for "As soon as possible", rupees
 export const FAMILY_CONTACT = "Suresh (brother)";
 export const VISIT_COUNTS = [3, 5, 7, 10, 14];
 export const ARRIVAL_CODE = "4821";
@@ -185,12 +187,70 @@ export const SAMPLE_REVIEWS = [
   { text: "Clean, careful work and the visit notes were easy to share with our doctor.", who: "Sample review · son of a patient" },
 ];
 
-export const SAMPLE_VITALS = [
-  { k: "Blood pressure", v: "128/82 mmHg" },
-  { k: "Pulse", v: "76 bpm" },
-  { k: "Temperature", v: "98.4 °F" },
-  { k: "Oxygen (SpO2)", v: "98%" },
+// The checks a patient can choose inside "Vitals check". Each has its own price and explanation.
+export type VitalCheck = { id: string; name: string; price: number; what: string; how: string; prepare: string; sample: string };
+
+export const VITALS_SERVICE_ID = "vitals";
+
+export const VITAL_CHECKS: VitalCheck[] = [
+  {
+    id: "bp",
+    name: "Blood pressure",
+    price: 50,
+    what: "The force of blood pushing on the walls of your arteries. High or low readings help your doctor adjust treatment.",
+    how: "A cuff is wrapped around the upper arm and inflated. It takes about 2 minutes.",
+    prepare: "Sit quietly for 5 minutes first. Avoid tea, coffee and smoking for 30 minutes before.",
+    sample: "128/82 mmHg",
+  },
+  {
+    id: "sugar",
+    name: "Blood sugar",
+    price: 70,
+    what: "The amount of glucose in your blood. It is the main check for people with diabetes.",
+    how: "A small finger prick gives one drop of blood, read on a glucometer in a few seconds.",
+    prepare: "For a fasting reading, do not eat for 8 hours. Otherwise tell the nurse when you last ate.",
+    sample: "112 mg/dL",
+  },
+  {
+    id: "temp",
+    name: "Temperature",
+    price: 30,
+    what: "Your body temperature, to check for fever.",
+    how: "A digital thermometer under the arm or at the forehead, for less than a minute.",
+    prepare: "No preparation needed. Avoid a hot drink or bath just before.",
+    sample: "98.4 °F",
+  },
+  {
+    id: "spo2",
+    name: "Oxygen level (SpO2)",
+    price: 40,
+    what: "How much oxygen your blood is carrying. It matters in breathing and heart problems.",
+    how: "A small clip on the fingertip shines a light through the finger. It does not hurt.",
+    prepare: "Remove nail polish from one finger. Keep the hand warm and still.",
+    sample: "98%",
+  },
+  {
+    id: "pulse",
+    name: "Pulse (heart rate)",
+    price: 30,
+    what: "How many times your heart beats in a minute, and whether the rhythm is steady.",
+    how: "Counted at the wrist for one minute, or read from the fingertip clip.",
+    prepare: "Rest for 5 minutes before the check.",
+    sample: "76 beats per minute",
+  },
+  {
+    id: "weight",
+    name: "Weight and BMI",
+    price: 30,
+    what: "Your weight, and BMI, which compares weight with height. Useful for tracking over time.",
+    how: "A digital scale on a flat floor. The nurse works out BMI from your height.",
+    prepare: "Wear light clothes and no shoes. Know your height if you can.",
+    sample: "64 kg · BMI 24.1",
+  },
 ];
+
+// Readings a nurse notes on every visit, whatever the service.
+export const ROUTINE_CHECK_IDS = ["bp", "pulse", "temp", "spo2"];
 
 export const SAMPLE_PAST_VISITS = [
   { title: "Wound dressing", when: "28 Sep, 9:00 AM", who: "Ramesh · Father", by: "Ravi Kumar", note: "Stitches site cleaned and re-dressed. Healing well, no swelling." },

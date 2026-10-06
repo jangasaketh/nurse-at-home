@@ -1,6 +1,9 @@
 // Booking rules and helpers. No UI in this file.
 
-import { CAREGIVERS, CITIES, HOUSE, PATIENTS, SERVICES, SLOTS, VISIT_FEE, type Caregiver, type City, type Service } from "./data";
+import {
+  CAREGIVERS, CITIES, HOUSE, PATIENTS, ROUTINE_CHECK_IDS, SERVICES, SLOTS, URGENT_FEE, URGENT_SLOT,
+  VISIT_FEE, VITAL_CHECKS, VITALS_SERVICE_ID, type Caregiver, type City, type Service,
+} from "./data";
 
 /** A confirmed booking: one visit, or a course of repeat visits. */
 export type Booking = {
@@ -17,6 +20,7 @@ export type Booking = {
   womenOnly: boolean;
   language: string | null;
   cityId: string;
+  vitalIds: string[]; // checks chosen for a vitals visit
 };
 
 export type VisitRecord = { title: string; when: string; who: string; by: string; note: string };
@@ -35,6 +39,7 @@ export type Draft = {
   womenOnly: boolean; // patient preference
   language: string | null; // patient preference
   cityId: string;
+  vitalIds: string[]; // checks chosen for a vitals visit
 };
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -82,6 +87,15 @@ export function matchesPreferences(c: Caregiver, womenOnly: boolean, language: s
   return (!womenOnly || c.gender === "F") && (!language || c.speaks.includes(language));
 }
 
+/** SAMPLE availability: is this caregiver free at the chosen arrival time? */
+export const isFreeAt = (c: Caregiver, slot: string) => !c.busyAt.includes(slot);
+
+export const isVitals = (service: Service) => service.id === VITALS_SERVICE_ID;
+export const checksByIds = (ids: string[]) => VITAL_CHECKS.filter((v) => ids.includes(v.id));
+/** Readings shown on the visit record: the chosen checks for a vitals visit, routine ones otherwise. */
+export const readingsFor = (service: Service, vitalIds: string[]) =>
+  checksByIds(isVitals(service) ? vitalIds : ROUTINE_CHECK_IDS);
+
 export const roleWord = (service: Service) => (service.nurseOnly ? "nurse" : "caregiver");
 export const proofText = (c: Caregiver) =>
   c.isNurse ? "Nursing council registration verified" : "Training certificate verified";
@@ -93,11 +107,18 @@ export function describeDraft(d: Draft) {
   const patient = patientById(d.patientId);
   const city = cityById(d.cityId);
   const allowed = caregiversFor(service, city);
-  const caregivers = allowed.filter((c) => matchesPreferences(c, d.womenOnly, d.language));
-  const caregiver = allowed.find((c) => c.id === d.caregiverId) ?? allowed[0];
   const visits = d.repeat ? d.count : 1;
   const slot = d.slot ?? SLOTS[1];
+  const free = allowed.filter((c) => isFreeAt(c, slot));
+  const caregivers = free.filter((c) => matchesPreferences(c, d.womenOnly, d.language));
+  // Everyone free who matches the language, ignoring "women only". Used for the fallback offer.
+  const withoutGender = free.filter((c) => matchesPreferences(c, false, d.language));
+  const caregiver = allowed.find((c) => c.id === d.caregiverId) ?? allowed[0];
   const lastOffset = d.dateIdx + (visits - 1) * d.every;
+  const checks = isVitals(service) ? checksByIds(d.vitalIds) : [];
+  const unitPrice = isVitals(service) ? checks.reduce((sum, v) => sum + v.price, 0) : service.price;
+  const urgent = visits === 1 && slot === URGENT_SLOT;
+  const urgentFee = urgent ? URGENT_FEE : 0;
   return {
     service,
     patient,
@@ -105,18 +126,24 @@ export function describeDraft(d: Draft) {
     address: addressIn(city),
     languages: languagesIn(city),
     caregivers,
+    noWomenFree: d.womenOnly && caregivers.length === 0 && withoutGender.length > 0,
+    othersFree: withoutGender.length,
     caregiver,
     visits,
     slot,
+    checks,
+    unitPrice,
+    urgent,
+    urgentFee,
     isCourse: visits > 1,
     who: roleWord(service),
     everyText: d.every === 1 ? "every day" : "every 2 days",
     whenText: `${dayAt(d.dateIdx).full}, ${slot}`,
     firstDay: dayAt(d.dateIdx).short,
     lastDay: dayAt(lastOffset).short,
-    serviceTotal: service.price * visits,
+    serviceTotal: unitPrice * visits,
     feeTotal: VISIT_FEE * visits,
-    total: (service.price + VISIT_FEE) * visits,
+    total: (unitPrice + VISIT_FEE) * visits + urgentFee,
   };
 }
 
@@ -125,7 +152,9 @@ export function describeBooking(b: Booking) {
   const patient = patientById(b.patientId);
   // Later visits of an "any available" course still respect the patient's preferences.
   const city = cityById(b.cityId);
-  const preferred = caregiversFor(service, city).filter((c) => matchesPreferences(c, b.womenOnly, b.language) || c.id === b.caregiverId);
+  const preferred = caregiversFor(service, city).filter(
+    (c) => (isFreeAt(c, b.slot) && matchesPreferences(c, b.womenOnly, b.language)) || c.id === b.caregiverId,
+  );
   const list = preferred.length ? preferred : caregiversFor(service, city);
   const firstIdx = Math.max(0, list.findIndex((c) => c.id === b.caregiverId));
   // "Any available" has no real matching yet, so the demo rotates through the list.
@@ -136,6 +165,7 @@ export function describeBooking(b: Booking) {
     service,
     patient,
     caregiver,
+    readings: readingsFor(service, b.vitalIds),
     who: roleWord(service),
     when: `${dayAt(offset).full}, ${b.slot}`,
     nextWhen: `${dayAt(offset + b.everyDays).full}, ${b.slot}`,

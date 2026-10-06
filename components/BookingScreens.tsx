@@ -2,20 +2,29 @@
 
 import { useState } from "react";
 import { useApp } from "@/lib/store";
-import { FAMILY_CONTACT, SAMPLE_REVIEWS, SLOTS, URGENT_SLOT, VISIT_COUNTS } from "@/lib/data";
-import { allowedText, dayAt, describeDraft, money, prescriptionMissing, proofText } from "@/lib/booking";
+import { FAMILY_CONTACT, SAMPLE_REVIEWS, SLOTS, URGENT_FEE, URGENT_SLOT, VISIT_COUNTS, VITAL_CHECKS } from "@/lib/data";
+import { allowedText, dayAt, describeDraft, isVitals, money, prescriptionMissing, proofText } from "@/lib/booking";
 import { Icon, Star } from "./Icon";
 import { BottomBar, Chip, Header, RadioCard, Rows } from "./ui";
 
 /* 1. Service details, with the prescription gate */
 export function ServiceScreen() {
   const { state, set, go } = useApp();
-  const { service, patient, address } = describeDraft(state);
+  const { service, patient, address, unitPrice } = describeDraft(state);
   const [error, setError] = useState(false);
+  const [openInfo, setOpenInfo] = useState<string | null>(null);
+  const pickChecks = isVitals(service);
+  const noChecks = pickChecks && state.vitalIds.length === 0;
 
   const next = () => {
-    if (prescriptionMissing(service, state.hasPrescription)) setError(true);
+    if (prescriptionMissing(service, state.hasPrescription) || noChecks) setError(true);
     else go("schedule");
+  };
+
+  const toggleCheck = (id: string) => {
+    const on = state.vitalIds.includes(id);
+    set({ vitalIds: on ? state.vitalIds.filter((v) => v !== id) : [...state.vitalIds, id] });
+    setError(false);
   };
 
   return (
@@ -26,10 +35,52 @@ export function ServiceScreen() {
           <h1>{service.name}</h1>
           <p className="muted">{service.short}</p>
           <div className="row-inline strong" style={{ gap: 16, marginTop: 6 }}>
-            <span>{money(service.price)}</span>
+            <span>{money(unitPrice)}</span>
             <span className="muted" style={{ fontWeight: 500 }}>About {service.mins}</span>
           </div>
         </div>
+
+        {pickChecks && (
+          <div className="stack">
+            <div className="stack-xs">
+              <h2>Choose your checks</h2>
+              <p className="small muted">Tick the checks you want. Tap a name to see what it is and how to prepare.</p>
+            </div>
+            {VITAL_CHECKS.map((v) => {
+              const on = state.vitalIds.includes(v.id);
+              const open = openInfo === v.id;
+              return (
+                <div key={v.id} className={`check-item ${on ? "on" : ""}`}>
+                  <div className="check-row">
+                    <input
+                      id={`check-${v.id}`}
+                      type="checkbox"
+                      checked={on}
+                      onChange={() => toggleCheck(v.id)}
+                      aria-label={`Add ${v.name}`}
+                    />
+                    <button type="button" className="check-name" aria-expanded={open} onClick={() => setOpenInfo(open ? null : v.id)}>
+                      <span className="stack-xs">
+                        <span className="strong">{v.name}</span>
+                        <span className="small primary-text">{open ? "Hide details" : "What is this?"}</span>
+                      </span>
+                      <span className="strong">{money(v.price)}</span>
+                    </button>
+                  </div>
+                  {open && (
+                    <div className="check-info">
+                      <div className="kv"><span className="k">What it tells you</span><span>{v.what}</span></div>
+                      <div className="kv"><span className="k">How it is done</span><span>{v.how}</span></div>
+                      <div className="kv"><span className="k">How to prepare</span><span>{v.prepare}</span></div>
+                      <p className="tiny muted">The nurse explains your reading. Your doctor decides what it means for you.</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {error && noChecks && <div role="alert" className="error">Choose at least one check to continue.</div>}
+          </div>
+        )}
 
         <div className="card stack">
           <h2>What the visit includes</h2>
@@ -133,7 +184,7 @@ export function ScheduleScreen() {
             <RadioCard
               selected={state.slot === URGENT_SLOT}
               onClick={() => { set({ slot: URGENT_SLOT }); setError(false); }}
-              label="As soon as possible"
+              label={`As soon as possible · ${money(URGENT_FEE)} extra`}
               sub={`The nearest free ${d.who} reaches you within 60 minutes.`}
             />
           )}
@@ -248,10 +299,29 @@ export function CaregiverListScreen() {
           </div>
         </div>
 
-        {d.caregivers.length === 0 && (
+        {d.noWomenFree && (
+          <div className="warn-box stack" style={{ gap: 12 }}>
+            <div className="stack-xs">
+              <h2>No woman {d.who} is free near you at this time</h2>
+              <div className="sub">
+                {d.othersFree === 1 ? `1 male ${d.who} is` : `${d.othersFree} male ${d.who}s are`} free nearby. You can
+                see them, or pick another time for a woman {d.who}.
+              </div>
+            </div>
+            <button type="button" className="btn btn-warn" onClick={() => set({ womenOnly: false })}>
+              Show male {d.who}s
+            </button>
+            <button type="button" className="btn btn-warn" onClick={() => go("schedule")}>
+              Pick another time
+            </button>
+          </div>
+        )}
+
+        {d.caregivers.length === 0 && !d.noWomenFree && (
           <div className="dashed-box stack">
             <div className="muted">No {d.who} matches these preferences at this time.</div>
             <button type="button" className="link-btn" onClick={() => set({ womenOnly: false, language: null })}>Clear preferences</button>
+            <button type="button" className="link-btn" onClick={() => go("schedule")}>Pick another time</button>
           </div>
         )}
 
@@ -368,6 +438,7 @@ export function ReviewScreen() {
 
   const summary = [
     { k: "Service", v: d.service.name },
+    ...(d.checks.length ? [{ k: "Checks", v: d.checks.map((c) => c.name).join(", ") }] : []),
     { k: "Patient", v: d.patient.full },
     { k: d.isCourse ? "First visit" : "When", v: d.whenText },
     ...(d.isCourse ? [{ k: "Course", v: `${d.visits} visits, ${d.everyText}, until ${d.lastDay}` }] : []),
@@ -393,6 +464,7 @@ export function ReviewScreen() {
         womenOnly: state.womenOnly,
         language: state.language,
         cityId: state.cityId,
+        vitalIds: state.vitalIds,
       },
       step: 0,
       screen: "tracking",
@@ -408,6 +480,9 @@ export function ReviewScreen() {
         <div className="card stack price-lines" style={{ gap: 8 }}>
           <div className="line"><span className="muted">{d.service.name}{times}</span><span>{money(d.serviceTotal)}</span></div>
           <div className="line"><span className="muted">Home visit charge{times}</span><span>{money(d.feeTotal)}</span></div>
+          {d.urgent && (
+            <div className="line"><span className="muted">Urgent visit charge (within 60 minutes)</span><span>{money(d.urgentFee)}</span></div>
+          )}
           <div className="line total"><span>Total</span><span>{money(d.total)}</span></div>
         </div>
 

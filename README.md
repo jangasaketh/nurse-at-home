@@ -38,6 +38,15 @@ The quickest way is Vercel or Netlify. Both read the code from GitHub and give y
 4. Keep the default settings and deploy. Next.js is detected automatically.
 5. Open the link on any phone, tablet or browser. Every later `git push` updates it.
 
+## Or host it on GitHub Pages
+
+A Next.js project has no `index.html` until it is built, so GitHub Pages needs a workflow that builds it first.
+
+1. Keep `next.config.mjs` in the same folder as `package.json`.
+2. In the repository, open Settings, then Pages, and set Source to "GitHub Actions".
+3. Add the workflow file `deploy.yml` at `.github/workflows/deploy.yml` (at the top of the repository, not inside the app folder).
+4. Open the Actions tab and wait for "Deploy to GitHub Pages" to finish. The page is at `https://YOUR-USERNAME.github.io/YOUR-REPO/`.
+
 ## What to test
 
 - Login: wrong-length mobile number and OTP show errors.
@@ -45,8 +54,9 @@ The quickest way is Vercel or Netlify. Both read the code from GitHub and give y
 - Injection, IV drip and medication cannot go past the service screen without a prescription. There is no doctor consultation route.
 - Those three services list registered nurses only. Dressing and vitals also list the compounder.
 - Service details show who brings what (supplies versus medicine).
-- Date and time: a single visit today can be booked "As soon as possible" (within 60 minutes). Slots run from 6:00 AM to 10:00 PM.
-- Caregiver list: "Women only" and language preferences (the city's language, Hindi, English) filter the list. Each profile shows the registration number, and the compounder is labelled as not a registered nurse.
+- Vitals check: tick one or more checks (blood pressure, sugar, temperature, oxygen, pulse, weight). Tapping a name shows what it is and how to prepare. The price is the total of the ticked checks, and only those readings appear on the visit record.
+- Date and time: a single visit today can be booked "As soon as possible" (within 60 minutes) for an extra charge, shown as its own line on the review screen. Slots run from 6:00 AM to 10:00 PM.
+- Caregiver list: "Women only" and language preferences (the city's language, Hindi, English) filter the list. With "Women only" on at 10:00 PM, no woman is free in the sample data, so the app offers to show male nurses or pick another time. Each profile shows the registration number, and the compounder is labelled as not a registered nurse.
 - Review: tick "Send visit updates" and the tracking screen confirms the family contact is being updated.
 - Date and time: "Repeat visits" lets you choose 3 to 14 visits, every day or every 2 days, with the same nurse or any available nurse.
 - Review shows the price multiplied by the number of visits.
