@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useApp } from "@/lib/store";
-import { ARRIVAL_CODE } from "@/lib/data";
-import { canReschedule, describeBooking, newId } from "@/lib/booking";
+import { ARRIVAL_CODE, LATE_MINUTES, NO_SHOW_MINUTES, VISIT_FEE } from "@/lib/data";
+import { canReschedule, describeBooking, money, newId } from "@/lib/booking";
 import { Icon, Star } from "./Icon";
 import { BottomBar, Header } from "./ui";
 
@@ -59,6 +59,49 @@ export function TrackingScreen() {
 
   const watcher = booking.notifyContact ? state.contact : null;
 
+  // Ends this visit without care being given. A course moves on to its next visit.
+  const endVisit = (status: "cancelled" | "missed", note: string, chargeKept: boolean) => {
+    set({
+      booking: b.hasNext ? { ...booking, visitNo: booking.visitNo + 1 } : null,
+      step: 0,
+      caregiverLate: false,
+      // Cash bookings: nothing was collected, so the charge (and any earlier unpaid one) moves to the next booking.
+      arrears: state.arrears + (booking.pay === "cash" ? (chargeKept ? VISIT_FEE : 0) + (b.hasNext ? 0 : booking.carried) : 0),
+      history: [
+        {
+          id: newId("v"),
+          status,
+          title: b.isCourse ? `${b.service.name}, visit ${booking.visitNo} of ${booking.visits}` : b.service.name,
+          when: b.when,
+          who: b.patient.chip === "Me" ? "You" : b.patient.chip,
+          by: b.caregiver.name,
+          note,
+          readings: [],
+        },
+        ...state.history,
+      ],
+      screen: "bookings",
+      trail: [],
+    });
+  };
+  const visitPrice = booking.unitPrice + VISIT_FEE + (booking.visits === 1 ? booking.urgentFee : 0);
+
+  // RULE: the caregiver waits at the door, then the visit counts as missed and the home visit charge is kept.
+  const nobodyHome = () => {
+    endVisit("missed", `Nobody answered the door for ${NO_SHOW_MINUTES} minutes. The home visit charge was kept and paid to ${first}.`, true);
+    notify("Visit missed", booking.pay === "cash"
+      ? `${first} waited ${NO_SHOW_MINUTES} minutes at your door. The ${money(VISIT_FEE)} home visit charge will be added to your next booking.`
+      : `${first} waited ${NO_SHOW_MINUTES} minutes at your door. ${money(visitPrice - VISIT_FEE)} is refunded and the ${money(VISIT_FEE)} home visit charge is kept.`);
+  };
+
+  // RULE: if the caregiver cancels, the patient pays nothing.
+  const caregiverCancels = () => {
+    endVisit("cancelled", `Cancelled by ${first}. You were not charged for this visit.`, false);
+    notify(`${first} had to cancel`, booking.pay === "cash"
+      ? "You have not been charged. You can book another nurse from Home."
+      : `${money(visitPrice)} is refunded in full. You can book another nurse from Home.`);
+  };
+
   return (
     <div className="screen">
       <Header
@@ -75,6 +118,13 @@ export function TrackingScreen() {
               Call 112 now. In the real app this button also alerts our support team
               {state.contact ? ` and ${state.contact.name} (+91 ${state.contact.phone})` : " and your emergency contact, once you add one in Profile"}.
             </div>
+          </div>
+        )}
+
+        {state.caregiverLate && step < 2 && (
+          <div className="warn-box stack-sm">
+            <div className="strong">{first} is more than {LATE_MINUTES} minutes late</div>
+            <div className="sub">We are sorry. You can wait, or cancel free of charge.</div>
           </div>
         )}
 
@@ -143,7 +193,21 @@ export function TrackingScreen() {
           </div>
         )}
 
-        <button type="button" className="btn btn-demo" onClick={advance}>{demoLabels[step]}</button>
+        {/* There is no live nurse yet, so these buttons stand in for real events. Remove them before launch. */}
+        <div className="dashed-box stack">
+          <button type="button" className="btn btn-demo" onClick={advance}>{demoLabels[step]}</button>
+          {step < 2 && !state.caregiverLate && (
+            <button type="button" className="link-btn" onClick={() => set({ caregiverLate: true })}>
+              Prototype: nurse is {LATE_MINUTES} minutes late
+            </button>
+          )}
+          {step === 2 && (
+            <button type="button" className="link-btn" onClick={nobodyHome}>Prototype: nobody answers the door</button>
+          )}
+          {step < 3 && (
+            <button type="button" className="link-btn" onClick={caregiverCancels}>Prototype: nurse cancels</button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -162,7 +226,8 @@ export function DoneScreen() {
 
   const finish = () => {
     // A course moves on to its next visit. A single visit, or the last one, closes the booking.
-    if (b.hasNext) set({ booking: { ...booking, visitNo: booking.visitNo + 1 }, step: 0, screen: "home", trail: [] });
+    // The visit happened, so anything carried over from an earlier booking has now been collected.
+    if (b.hasNext) set({ booking: { ...booking, visitNo: booking.visitNo + 1, carried: 0 }, step: 0, screen: "home", trail: [] });
     else set({ booking: null, step: 0, screen: "home", trail: [] });
   };
 

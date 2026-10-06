@@ -1,8 +1,8 @@
 // Booking rules and helpers. No UI in this file.
 
 import {
-  CAREGIVERS, CITIES, ROUTINE_CHECK_IDS, SERVICES, SLOTS, URGENT_FEE, URGENT_SLOT,
-  VISIT_FEE, VITAL_CHECKS, VITALS_SERVICE_ID, type Caregiver, type City, type Service,
+  CAREGIVERS, CITIES, FREE_UNTIL_HOURS, GRACE_MINUTES, ROUTINE_CHECK_IDS, SERVICES, SLOTS, TIMED_CANCEL_RULE,
+  URGENT_FEE, URGENT_SLOT, VISIT_FEE, VITAL_CHECKS, VITALS_SERVICE_ID, type Caregiver, type City, type Service,
 } from "./data";
 
 /* ---------- People, places, messages ---------- */
@@ -79,6 +79,7 @@ export type Booking = {
   patient: Patient; // copied at booking time, so later edits do not change the booking
   addressText: string;
   cityId: string;
+  bookedAt: number; // when the booking was confirmed (milliseconds)
   startDate: string; // yyyy-mm-dd of the first visit
   slot: string;
   visits: number;
@@ -94,11 +95,12 @@ export type Booking = {
   urgentFee: number;
   pay: PayMethod;
   notifyContact: boolean; // send visit updates to the emergency contact
+  carried: number; // unpaid charge from an earlier booking, to be collected with this one
 };
 
 export type VisitRecord = {
   id: string;
-  status: "completed" | "cancelled";
+  status: "completed" | "cancelled" | "missed";
   title: string;
   when: string;
   who: string;
@@ -249,26 +251,76 @@ export function describeBooking(b: Booking) {
 
 /* ---------- Cancelling and rescheduling ---------- */
 
-/**
- * SAMPLE POLICY. Step: 0 accepted, 1 on the way, 2 arrived, 3 care in progress.
- * - Before the caregiver sets off: free.
- * - After they set off: the home visit charge is kept.
- * - Once care has started: cannot be cancelled.
- * The same wording is in the FAQ in lib/data.ts. Change both together.
- */
-export function cancelTerms(b: Booking, step: number, scope: "one" | "all") {
+// PROVISIONAL RULE (applied 6 Oct 2026). Settings and the on/off switch are in lib/data.ts.
+// Step: 0 accepted, 1 on the way, 2 arrived, 3 care in progress.
+//
+// Free:    within GRACE_MINUTES of booking; or more than FREE_UNTIL_HOURS before the visit;
+//          or when the caregiver is late.
+// Charged: inside FREE_UNTIL_HOURS, or once the caregiver has set off. Only the home visit
+//          charge is ever kept, and it is paid to the caregiver.
+// Never:   once care has started.
+//
+// With TIMED_CANCEL_RULE off, only "has the caregiver set off?" decides.
+// TODO (backend): "no caregiver assigned yet" should also be free. In this app a caregiver is always assigned.
+
+function slotMinutes(slot: string) {
+  const m = slot.match(/^(\d+):(\d+) (AM|PM)$/);
+  if (!m) return 0;
+  return ((Number(m[1]) % 12) + (m[3] === "PM" ? 12 : 0)) * 60 + Number(m[2]);
+}
+
+/** When the next visit of this booking is due, in milliseconds. */
+export function visitTime(b: Booking) {
+  if (b.slot === URGENT_SLOT) return b.bookedAt + 60 * 60000;
+  const day = fromISO(addDays(b.startDate, (b.visitNo - 1) * b.everyDays));
+  return day.getTime() + slotMinutes(b.slot) * 60000;
+}
+
+export type FeeReason = "caregiver-late" | "grace" | "set-off" | "early" | "close";
+
+/** What it costs the patient to cancel or move the next visit right now, and why. */
+export function changeFee(b: Booking, step: number, now: number, caregiverLate: boolean): { fee: number; why: FeeReason } {
+  if (caregiverLate) return { fee: 0, why: "caregiver-late" };
+  if (TIMED_CANCEL_RULE && now - b.bookedAt <= GRACE_MINUTES * 60000) return { fee: 0, why: "grace" };
+  if (step >= 1) return { fee: VISIT_FEE, why: "set-off" };
+  if (!TIMED_CANCEL_RULE || visitTime(b) - now > FREE_UNTIL_HOURS * 3600000) return { fee: 0, why: "early" };
+  return { fee: VISIT_FEE, why: "close" };
+}
+
+/** The reason, in words the patient sees. */
+export function feeReasonText(why: FeeReason, who: string) {
+  switch (why) {
+    case "caregiver-late": return `Free, because the ${who} is running late.`;
+    case "grace": return `Free, because you booked less than ${GRACE_MINUTES} minutes ago.`;
+    case "early": return TIMED_CANCEL_RULE ? `Free, because the visit is more than ${FREE_UNTIL_HOURS} hours away.` : `Free, because the ${who} has not set off yet.`;
+    case "set-off": return `The home visit charge is kept because the ${who} has already set off. It is paid to the ${who}.`;
+    case "close": return `The home visit charge is kept because the visit is less than ${FREE_UNTIL_HOURS} hours away. It is paid to the ${who}.`;
+  }
+}
+
+/** One line shown before payment, so the rule is never a surprise. */
+export function policyLine(urgent: boolean, who: string) {
+  if (!TIMED_CANCEL_RULE) return `Free to cancel until the ${who} sets off. After that the ${money(VISIT_FEE)} home visit charge is kept.`;
+  const free = urgent
+    ? `Free to cancel within ${GRACE_MINUTES} minutes of booking.`
+    : `Free to cancel or move up to ${FREE_UNTIL_HOURS} hours before the visit.`;
+  return `${free} After that the ${money(VISIT_FEE)} home visit charge is kept and paid to the ${who}. We never keep more than that.`;
+}
+
+export function cancelTerms(b: Booking, step: number, scope: "one" | "all", now: number, caregiverLate: boolean) {
   const remaining = b.visits - b.visitNo + 1;
   const count = scope === "all" ? remaining : 1;
   const gross = (b.unitPrice + VISIT_FEE) * count + (b.visits === 1 ? b.urgentFee : 0);
-  const kept = step >= 1 ? VISIT_FEE : 0;
+  const { fee, why } = changeFee(b, step, now, caregiverLate);
   const paidOnline = b.pay !== "cash";
   return {
     allowed: step < 3,
     count,
-    kept,
+    kept: fee,
+    why,
     paidOnline,
-    refund: paidOnline ? gross - kept : 0,
-    due: paidOnline ? 0 : kept,
+    refund: paidOnline ? gross - fee : 0,
+    due: paidOnline ? 0 : fee, // cash bookings: added to the next booking
   };
 }
 

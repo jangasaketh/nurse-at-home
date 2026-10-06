@@ -102,7 +102,7 @@ export function BookingsScreen() {
                       <span className="strong" style={{ fontSize: 17 }}>{v.title}</span>
                       {v.status === "completed"
                         ? <span className="pill pill-ok">Completed</span>
-                        : <span className="pill pill-off">Cancelled</span>}
+                        : <span className="pill pill-off">{v.status === "missed" ? "Missed" : "Cancelled"}</span>}
                     </div>
                     <div className="small muted">{v.when} · {v.who}</div>
                     <div className="small muted">With {v.by}</div>

@@ -242,6 +242,16 @@ export const VITAL_CHECKS: VitalCheck[] = [
 // Readings a nurse notes on every visit, whatever the service.
 export const ROUTINE_CHECK_IDS = ["bp", "pulse", "temp", "spo2"];
 
+// ---------- Cancellation and reschedule rule ----------
+// PROVISIONAL RULE, applied 6 Oct 2026. The owner may change or remove it.
+// To go back to the simple rule ("free until the nurse sets off, then the home visit charge is kept"),
+// set TIMED_CANCEL_RULE to false. Nothing else needs to change. Then update the FAQ answer below to match.
+export const TIMED_CANCEL_RULE = true;
+export const GRACE_MINUTES = 5; // free to cancel this long after booking, whatever the visit time
+export const FREE_UNTIL_HOURS = 2; // free to cancel or move a visit until this long before it starts
+export const LATE_MINUTES = 30; // if the caregiver is later than this, cancelling is free
+export const NO_SHOW_MINUTES = 10; // caregiver waits this long at the door before the visit counts as missed
+
 // ---------- Account, bookings and support ----------
 
 export const RELATIONS = ["Mother", "Father", "Spouse", "Son", "Daughter", "Brother", "Sister", "Grandparent", "Other"];
@@ -279,13 +289,17 @@ export const FAQ = [
     a: "Compounders are trained helpers, not registered nurses. They do wound dressing and vitals checks only. Injections, drips and medication always go to a registered nurse.",
   },
   {
-    // SAMPLE POLICY: matches cancelTerms() in lib/booking.ts. Change both together.
+    // PROVISIONAL RULE: matches changeFee() in lib/booking.ts and the settings above. Change them together.
     q: "Can I cancel or change a booking?",
-    a: "Yes, from the Bookings tab. Cancelling is free until the nurse sets off. After that the home visit charge is kept. Once care has started the visit cannot be cancelled. You can move a visit to another day or time until the nurse sets off.",
+    a: "Yes, from the Bookings tab. It is free within 5 minutes of booking, and any time up to 2 hours before the visit. After that, or once the nurse has set off, the home visit charge is kept and paid to the nurse. We never keep more than that. Once care has started the visit cannot be cancelled. If the patient was hospitalised or got worse, tell support and we will waive the charge.",
   },
   {
     q: "What if the nurse is late or does not come?",
-    a: "[Write your policy here, for example a full refund or a free re-booking.]",
+    a: "If the nurse is more than 30 minutes late, or has to cancel, you can cancel free of charge and you get a full refund.",
+  },
+  {
+    q: "What if nobody is home when the nurse arrives?",
+    a: "The nurse waits 10 minutes at the door and tries to call. After that the visit counts as missed and the home visit charge is kept.",
   },
   {
     q: "Is this for emergencies?",

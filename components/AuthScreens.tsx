@@ -93,21 +93,22 @@ export function OtpScreen() {
   );
 }
 
-/* First login only: the person's name, and the consents the app cannot work without. */
+/* First login only: the person's name, and the one consent the app cannot work without. */
 export function SetupScreen() {
   const { state, set, open } = useApp();
   const [tried, setTried] = useState(false);
   const name = state.nameDraft.trim();
-  const consent = state.consent;
-  const setConsent = (patch: Partial<typeof consent>) => set({ consent: { ...consent, ...patch } });
+  // One tick covers both required consents: the terms and privacy policy, and storing health details.
+  const agreed = state.consent.terms && state.consent.health;
+  const setAgreed = (value: boolean) => set({ consent: { terms: value, health: value, updates: false } });
 
   const nameError = tried && name.length < 2 ? "Enter your name." : undefined;
-  const consentMissing = tried && !(consent.terms && consent.health);
+  const consentMissing = tried && !agreed;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     setTried(true);
-    if (name.length < 2 || !consent.terms || !consent.health) return;
+    if (name.length < 2 || !agreed) return;
     // TODO: save the profile and the consent (with date and time) through the API.
     set({
       patients: [{ id: "me", name, relation: SELF, age: null, gender: "" }],
@@ -138,17 +139,12 @@ export function SetupScreen() {
         />
 
         <div className="stack">
-          <CheckRow id="consent-terms" checked={consent.terms} onChange={(v) => setConsent({ terms: v })}>
-            I agree to the Terms of Use and the Privacy Policy.
-          </CheckRow>
-          <CheckRow id="consent-health" checked={consent.health} onChange={(v) => setConsent({ health: v })}>
-            I allow my health details (prescriptions, visit notes and readings) to be stored and shown to the caregiver I book.
-          </CheckRow>
-          <CheckRow id="consent-updates" checked={consent.updates} onChange={(v) => setConsent({ updates: v })}>
-            Send me reminders and offers on WhatsApp. <span className="muted">Optional.</span>
+          <CheckRow id="consent-all" checked={agreed} onChange={setAgreed}>
+            I agree to the Terms of Use and the Privacy Policy, and I allow my health details (prescriptions, visit
+            notes and readings) to be stored and shown to the caregiver I book.
           </CheckRow>
           {consentMissing && (
-            <div role="alert" className="error">Tick the first two boxes to continue. The app cannot book a visit without them.</div>
+            <div role="alert" className="error">Tick the box to continue. The app cannot book a visit without it.</div>
           )}
           <p className="small muted">
             Read the{" "}

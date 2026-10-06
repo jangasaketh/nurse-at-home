@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useApp } from "@/lib/store";
 import { SAMPLE_REVIEWS, SLOTS, URGENT_FEE, URGENT_SLOT, VISIT_COUNTS, VITAL_CHECKS } from "@/lib/data";
-import { allowedText, dayAt, describeDraft, isVitals, money, prescriptionMissing, proofText } from "@/lib/booking";
+import { allowedText, dayAt, describeDraft, isVitals, money, policyLine, prescriptionMissing, proofText } from "@/lib/booking";
 import { useAction, useLoad } from "@/lib/fake-api";
 import { Icon, Star } from "./Icon";
 import { ActionError, BottomBar, CheckRow, Chip, ErrorState, Header, RadioCard, Rows, Skeleton } from "./ui";
@@ -451,6 +451,7 @@ export function ReviewScreen() {
   const d = describeDraft(state);
   const action = useAction(state.simulateFailure);
   const contact = state.contact;
+  const payNow = d.total + state.arrears; // includes any unpaid charge from an earlier cash booking
   const times = d.isCourse ? ` × ${d.visits}` : "";
 
   const caregiverLine = d.isCourse
@@ -479,6 +480,7 @@ export function ReviewScreen() {
           patient: { id: d.patient.id, name: d.patient.name, relation: d.patient.relation, age: d.patient.age, gender: d.patient.gender },
           addressText: d.addressText,
           cityId: d.city.id,
+          bookedAt: Date.now(),
           startDate: d.startDate,
           slot: d.slot,
           visits: d.visits,
@@ -494,8 +496,11 @@ export function ReviewScreen() {
           urgentFee: d.urgentFee,
           pay: state.pay,
           notifyContact: state.notifyFamily && contact !== null,
+          carried: state.arrears,
         },
         step: 0,
+        arrears: 0,
+        caregiverLate: false,
         screen: "tracking",
         trail: [],
       });
@@ -515,7 +520,10 @@ export function ReviewScreen() {
           {d.urgent && (
             <div className="line"><span className="muted">Urgent visit charge (within 60 minutes)</span><span>{money(d.urgentFee)}</span></div>
           )}
-          <div className="line total"><span>Total</span><span>{money(d.total)}</span></div>
+          {state.arrears > 0 && (
+            <div className="line"><span className="muted">Unpaid charge from an earlier booking</span><span>{money(state.arrears)}</span></div>
+          )}
+          <div className="line total"><span>Total</span><span>{money(payNow)}</span></div>
         </div>
 
         <div className="stack">
@@ -538,16 +546,12 @@ export function ReviewScreen() {
           </button>
         )}
 
-        <p className="small muted">
-          {d.isCourse
-            ? `Cancel any remaining visit for free until the ${d.who} sets off.`
-            : `Free to cancel until the ${d.who} sets off.`}
-        </p>
+        <p className="small muted">{policyLine(d.urgent, d.who)}</p>
       </div>
       <BottomBar>
         {action.failed && <ActionError>The booking did not go through, and you have not been charged. Check your internet connection and try again.</ActionError>}
         <button type="button" className="btn btn-primary" disabled={action.busy} onClick={confirm}>
-          {action.busy ? "Confirming…" : d.isCourse ? `Confirm ${d.visits} visits · ${money(d.total)}` : `Confirm booking · ${money(d.total)}`}
+          {action.busy ? "Confirming…" : d.isCourse ? `Confirm ${d.visits} visits · ${money(payNow)}` : `Confirm booking · ${money(payNow)}`}
         </button>
       </BottomBar>
     </div>

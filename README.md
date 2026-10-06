@@ -4,6 +4,24 @@ Web app for booking verified nurses and compounders for home visits: injections,
 
 This is the **frontend only**. There is no server yet. Caregivers, prices and ratings are sample data. What a person enters (name, family, addresses, bookings) is saved in their own browser, so it survives a refresh on that device but is not shared with any other device. "Nurse at Home" is a placeholder name.
 
+## Reminder: the cancellation rule is provisional
+
+Applied on 6 Oct 2026 as a trial. **The owner has not made it final and may remove it.**
+
+The rule:
+- Free to cancel within 5 minutes of booking, or any time up to 2 hours before the visit.
+- Free if the nurse is more than 30 minutes late, or cancels.
+- Otherwise (inside 2 hours, or once the nurse has set off) the Rs 49 home visit charge is kept and paid to the nurse. Never more than that.
+- Rescheduling inside 2 hours costs the same Rs 49.
+- If nobody answers the door for 10 minutes, the visit counts as missed and the charge is kept.
+- Once care has started, the visit cannot be cancelled.
+- On a cash booking, a kept charge is added to the next booking.
+- Support can waive the charge if the patient was hospitalised or got worse.
+
+**To remove it:** open `lib/data.ts` and change `TIMED_CANCEL_RULE = true` to `false`. The app goes back to the simple rule: free until the nurse sets off, then the Rs 49 charge is kept. Then rewrite the "Can I cancel or change a booking?" answer in `FAQ` (same file) to match.
+
+**To adjust it:** the 5 minutes, 2 hours, 30 minutes and 10 minutes are the four numbers under `TIMED_CANCEL_RULE` in `lib/data.ts`.
+
 ## Run it on your computer
 
 You need [Node.js](https://nodejs.org) 20.9 or newer.
@@ -29,7 +47,7 @@ Vercel and Netlify also work: import the repository and deploy with the default 
 ## What to test
 
 **First login**
-- After the OTP, a new user is asked for a name and must tick two consents. The Terms and Privacy pages open from there.
+- After the OTP, a new user is asked for a name and must tick one consent box. The Terms and Privacy pages open from there.
 - Next comes the first address. "Skip for now" is allowed, but Home then asks for an address and a booking cannot continue without one.
 - Log out and log in again: the name screen is not shown a second time.
 
@@ -46,9 +64,12 @@ Vercel and Netlify also work: import the repository and deploy with the default 
 - "Women only" at 10:00 PM has no match in the sample data, so the app offers male nurses or another time.
 
 **Changing a booking**
-- Bookings tab or the visit screen: Reschedule and Cancel visit.
-- Reschedule works until the nurse sets off. Times when the booked nurse is busy are greyed out.
-- Cancel is free until the nurse sets off; after that the home visit charge is kept; once care has started it is not possible. A course can cancel one visit or all remaining visits.
+- Bookings tab or the visit screen: Reschedule and Cancel visit. The review screen states the rule before payment.
+- Straight after booking, cancelling is free (5-minute window), even if the nurse has set off.
+- A visit booked for today at a time already close or past is "inside 2 hours": after the 5 minutes, cancelling or moving it keeps Rs 49. A visit two days away stays free.
+- Visit screen, Prototype buttons: "nurse is 30 minutes late" makes cancelling free; "nobody answers the door" (after the nurse arrives) marks the visit as missed; "nurse cancels" gives a full refund.
+- Pay "after the visit" and miss a visit: the next booking shows "Unpaid charge from an earlier booking".
+- A course can cancel one visit or all remaining visits. Reschedule greys out times when the booked nurse is busy.
 
 **Notifications, help, records**
 - The bell on Home counts unread messages. They are created when a booking is confirmed, moved or cancelled, when the nurse sets off and arrives, and when a visit ends.
@@ -67,10 +88,9 @@ Vercel and Netlify also work: import the repository and deploy with the default 
 | --- | --- |
 | Prices, urgent charge, home visit charge | `lib/data.ts` |
 | Support phone, WhatsApp, email, hours | `SUPPORT` in `lib/data.ts` |
-| "What if the nurse is late" answer | `FAQ` in `lib/data.ts` |
-| Cancellation and refund policy | `cancelTerms()` in `lib/booking.ts`, and the matching FAQ answer |
+| Cancellation and reschedule rule (provisional, see the reminder at the top) | Switch and numbers in `lib/data.ts`; logic in `changeFee()` in `lib/booking.ts`; matching FAQ answer |
 | Terms of Use and Privacy Policy text | `LEGAL` in `lib/data.ts` (a lawyer must write these) |
-| Prototype tools block | `ProfileScreen` in `components/TabScreens.tsx` (delete it) |
+| Prototype tools block and Prototype buttons | `ProfileScreen` in `components/TabScreens.tsx`, and the dashed box in `TrackingScreen` in `components/VisitScreens.tsx` (delete them) |
 
 ## Where things are
 

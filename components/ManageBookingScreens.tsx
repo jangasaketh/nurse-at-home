@@ -1,13 +1,14 @@
 "use client";
 
 // Cancel a visit, or move it to another day or time.
+// The rule itself (when it is free, when a charge is kept) lives in lib/booking.ts and lib/data.ts.
 
 import { useState } from "react";
 import { useApp } from "@/lib/store";
-import { CANCEL_REASONS, SLOTS } from "@/lib/data";
+import { CANCEL_REASONS, FREE_UNTIL_HOURS, SLOTS, VISIT_FEE } from "@/lib/data";
 import {
-  addDays, canReschedule, cancelTerms, dayAt, dayInfo, describeBooking, isFreeAt, money, newId, todayISO,
-  type VisitRecord,
+  addDays, canReschedule, cancelTerms, changeFee, dayAt, dayInfo, describeBooking, feeReasonText, isFreeAt, money,
+  newId, todayISO, type VisitRecord,
 } from "@/lib/booking";
 import { useAction } from "@/lib/fake-api";
 import { ActionError, BottomBar, Chip, Header, RadioCard, Rows } from "./ui";
@@ -26,17 +27,30 @@ function NotPossible({ title, body }: { title: string; body: string }) {
   );
 }
 
+/** Shown whenever a charge is kept: the one case where support can waive it. */
+function WaiveNote() {
+  const { open } = useApp();
+  return (
+    <p className="small muted">
+      If the patient was hospitalised or got worse,{" "}
+      <button type="button" className="text-link" onClick={() => open("help")}>tell support</button>
+      {" "}and we will waive this charge.
+    </p>
+  );
+}
+
 export function CancelScreen() {
   const { state, set, back, notify } = useApp();
   const action = useAction(state.simulateFailure);
   const [scope, setScope] = useState<"one" | "all">("one");
   const [reason, setReason] = useState<string | null>(null);
   const [tried, setTried] = useState(false);
+  const [now] = useState(() => Date.now()); // the charge is worked out for the moment the screen opened
 
   const booking = state.booking;
   if (!booking) return <NotPossible title="No visit to cancel" body="You have no upcoming visit." />;
   const b = describeBooking(booking);
-  const terms = cancelTerms(booking, state.step, b.isCourse ? scope : "one");
+  const terms = cancelTerms(booking, state.step, b.isCourse ? scope : "one", now, state.caregiverLate);
   if (!terms.allowed) {
     return <NotPossible title="This visit cannot be cancelled now" body="Care has already started. If something is wrong, press SOS on the visit screen or contact support." />;
   }
@@ -45,18 +59,13 @@ export function CancelScreen() {
   const moneyLine = terms.paidOnline
     ? `${money(terms.refund)} goes back to your ${booking.pay === "upi" ? "UPI account" : "card"}.`
     : terms.due > 0
-      ? `The ${money(terms.due)} home visit charge is still to be paid.`
+      ? `The ${money(terms.due)} home visit charge will be added to your next booking.`
       : "You have not been charged anything.";
-  const keptLine = terms.kept > 0 && terms.paidOnline
-    ? `The ${money(terms.kept)} home visit charge is kept, because the ${b.who} has already set off.`
-    : terms.kept > 0
-      ? `This is because the ${b.who} has already set off.`
-      : `Cancelling is free until the ${b.who} sets off.`;
 
   const confirm = () => {
     setTried(true);
     if (!reason) return;
-    // TODO: cancel through the API, which also starts the refund.
+    // TODO: cancel through the API, which also starts the refund and pays the caregiver any kept charge.
     action.run(() => {
       const title = wholeCourse
         ? `${b.service.name}, visits ${booking.visitNo} to ${booking.visits}`
@@ -75,7 +84,16 @@ export function CancelScreen() {
       };
       // Cancelling one visit of a course moves on to the next one. Anything else closes the booking.
       const next = b.isCourse && scope === "one" && b.hasNext ? { ...booking, visitNo: booking.visitNo + 1 } : null;
-      set({ booking: next, step: 0, history: [record, ...state.history], screen: "bookings", trail: [] });
+      set({
+        booking: next,
+        step: 0,
+        caregiverLate: false,
+        // Cash bookings: a charge kept now, plus any earlier unpaid charge this booking was going to collect.
+        arrears: state.arrears + terms.due + (next === null && !terms.paidOnline ? booking.carried : 0),
+        history: [record, ...state.history],
+        screen: "bookings",
+        trail: [],
+      });
       notify(wholeCourse ? "Visits cancelled" : "Visit cancelled", `${title}. ${moneyLine}`);
     });
   };
@@ -112,8 +130,9 @@ export function CancelScreen() {
 
         <div className={terms.kept > 0 ? "warn-box stack-sm" : "tint-box stack-sm"}>
           <div className="strong">{moneyLine}</div>
-          <div className="small">{keptLine}</div>
+          <div className="small">{feeReasonText(terms.why, b.who)}</div>
         </div>
+        {terms.kept > 0 && <WaiveNote />}
       </div>
       <BottomBar>
         {action.failed && <ActionError>The visit was not cancelled. Check your internet connection and try again.</ActionError>}
@@ -134,6 +153,7 @@ export function RescheduleScreen() {
   const [dayIdx, setDayIdx] = useState(Math.min(4, Math.max(0, current)));
   const [slot, setSlot] = useState<string | null>(null);
   const [tried, setTried] = useState(false);
+  const [now] = useState(() => Date.now());
 
   if (!booking) return <NotPossible title="No visit to move" body="You have no upcoming visit." />;
   if (!canReschedule(booking, state.step)) {
@@ -141,17 +161,29 @@ export function RescheduleScreen() {
   }
   const b = describeBooking(booking);
   const isCurrent = (s: string) => dayIdx === current && s === booking.slot;
+  // Moving a visit at the last moment costs the same as cancelling it late: the caregiver held the slot.
+  const { fee, why } = changeFee(booking, state.step, now, state.caregiverLate);
+  const cash = booking.pay === "cash";
 
   const save = () => {
     setTried(true);
     if (!slot) return;
-    // TODO: move the visit through the API, which re-checks the caregiver's calendar.
+    // TODO: move the visit through the API, which re-checks the caregiver's calendar and takes any charge.
     action.run(() => {
       const newDate = addDays(todayISO(), dayIdx);
       // A course keeps its rhythm: the remaining visits move with this one.
       const startDate = addDays(newDate, -(booking.visitNo - 1) * booking.everyDays);
-      set({ booking: { ...booking, startDate, slot }, screen: "bookings", trail: [] });
-      notify("Visit moved", `${b.service.name} is now on ${dayInfo(newDate).full}, ${slot}, with ${b.caregiver.name}.`);
+      set({
+        booking: { ...booking, startDate, slot },
+        caregiverLate: false,
+        arrears: state.arrears + (cash ? fee : 0),
+        screen: "bookings",
+        trail: [],
+      });
+      const charge = fee === 0 ? "" : cash
+        ? ` The ${money(fee)} late-change charge will be added to your next booking.`
+        : ` A ${money(fee)} late-change charge was taken from your ${booking.pay === "upi" ? "UPI account" : "card"}.`;
+      notify("Visit moved", `${b.service.name} is now on ${dayInfo(newDate).full}, ${slot}, with ${b.caregiver.name}.${charge}`);
     });
   };
 
@@ -201,16 +233,25 @@ export function RescheduleScreen() {
             })}
           </div>
           {tried && !slot && <div role="alert" className="error">Pick a new arrival time.</div>}
-          <p className="small muted">
-            Free of charge until the {b.who} sets off.
-            {b.isCourse && b.remaining > 1 ? ` The other ${b.remaining - 1} visits in this course move with it.` : ""}
-          </p>
         </div>
+
+        <div className={fee > 0 ? "warn-box stack-sm" : "tint-box stack-sm"}>
+          <div className="strong">
+            {fee > 0 ? `Moving this visit now costs ${money(VISIT_FEE)}.` : "Moving this visit is free."}
+          </div>
+          <div className="small">
+            {fee > 0
+              ? `The visit is less than ${FREE_UNTIL_HOURS} hours away, so the ${b.who} is paid the home visit charge for the slot they held.`
+              : feeReasonText(why, b.who)}
+            {b.isCourse && b.remaining > 1 ? ` The other ${b.remaining - 1} visits in this course move with it.` : ""}
+          </div>
+        </div>
+        {fee > 0 && <WaiveNote />}
       </div>
       <BottomBar>
         {action.failed && <ActionError>The visit was not moved. Check your internet connection and try again.</ActionError>}
         <button type="button" className="btn btn-primary" disabled={action.busy} onClick={save}>
-          {action.busy ? "Saving…" : "Save new time"}
+          {action.busy ? "Saving…" : fee > 0 ? `Save new time · ${money(fee)}` : "Save new time"}
         </button>
       </BottomBar>
     </div>

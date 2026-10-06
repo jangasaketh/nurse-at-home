@@ -33,6 +33,8 @@ export type AppState = Draft & {
   history: VisitRecord[];
   notifyFamily: boolean;
   notifications: Notice[];
+  arrears: number; // unpaid home visit charge from a cash booking, added to the next booking
+  caregiverLate: boolean; // prototype tool: the caregiver is running more than 30 minutes late
   simulateFailure: boolean; // prototype tool: makes loads and actions fail, to show the error screens
 };
 
@@ -68,10 +70,12 @@ const initialState: AppState = {
   step: 0,
   history: [],
   notifications: [],
+  arrears: 0,
+  caregiverLate: false,
   simulateFailure: false,
 };
 
-const STORAGE_KEY = "nurse-at-home:v2";
+const STORAGE_KEY = "nurse-at-home:v3";
 
 type AppContextValue = {
   state: AppState;
