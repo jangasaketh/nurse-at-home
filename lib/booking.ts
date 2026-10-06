@@ -1,15 +1,85 @@
 // Booking rules and helpers. No UI in this file.
 
 import {
-  CAREGIVERS, CITIES, HOUSE, PATIENTS, ROUTINE_CHECK_IDS, SERVICES, SLOTS, URGENT_FEE, URGENT_SLOT,
+  CAREGIVERS, CITIES, ROUTINE_CHECK_IDS, SERVICES, SLOTS, URGENT_FEE, URGENT_SLOT,
   VISIT_FEE, VITAL_CHECKS, VITALS_SERVICE_ID, type Caregiver, type City, type Service,
 } from "./data";
+
+/* ---------- People, places, messages ---------- */
+
+export const SELF = "Me"; // relation value for the account holder
+
+export type Patient = { id: string; name: string; relation: string; age: number | null; gender: "F" | "M" | "" };
+export type Address = { id: string; label: string; line: string; area: string; cityId: string; pincode: string; landmark: string };
+export type Contact = { name: string; relation: string; phone: string };
+export type Notice = { id: string; title: string; body: string; at: number; read: boolean };
+export type PayMethod = "upi" | "card" | "cash";
+
+export const patientChip = (p: Patient) => (p.relation === SELF ? "Me" : `${p.name} · ${p.relation}`);
+export const patientMeta = (p: Patient) =>
+  [p.relation === SELF ? "You" : p.relation, p.age ? String(p.age) : null].filter(Boolean).join(", ");
+export const patientFull = (p: Patient) => {
+  const who = p.relation === SELF ? "you" : p.relation.toLowerCase();
+  return p.age ? `${p.name} (${who}), ${p.age}` : `${p.name} (${who})`;
+};
+const describePatient = (p: Patient) => ({ ...p, chip: patientChip(p), full: patientFull(p) });
+
+export const cityById = (id: string) => CITIES.find((c) => c.id === id) ?? CITIES[0];
+export const formatAddress = (a: Address) =>
+  [a.line, a.area, `${cityById(a.cityId).name}${a.pincode ? ` ${a.pincode}` : ""}`].filter(Boolean).join(", ");
+/** Language choices offered in a city: its own language, plus Hindi and English. */
+export const languagesIn = (city: City) => [city.language, "Hindi", "English"];
+
+export const newId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e4)}`;
+
+/* ---------- Dates ---------- */
+
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const pad = (n: number) => String(n).padStart(2, "0");
+const toISO = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const fromISO = (iso: string) => {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d);
+};
+
+export const todayISO = () => toISO(new Date());
+export const addDays = (iso: string, days: number) => {
+  const d = fromISO(iso);
+  d.setDate(d.getDate() + days);
+  return toISO(d);
+};
+
+/** Labels for a calendar date (yyyy-mm-dd), relative to today. */
+export function dayInfo(iso: string) {
+  const d = fromISO(iso);
+  const offset = Math.round((d.getTime() - fromISO(todayISO()).getTime()) / 86400000);
+  const short = `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  const word = offset === 0 ? "Today" : offset === 1 ? "Tomorrow" : DAYS[d.getDay()];
+  return { offset, weekday: offset === 0 ? "Today" : DAYS[d.getDay()], date: d.getDate(), short, full: `${word}, ${short}` };
+}
+export const dayAt = (offset: number) => dayInfo(addDays(todayISO(), offset));
+
+export function timeAgo(at: number) {
+  const mins = Math.floor((Date.now() - at) / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins} min ago`;
+  if (mins < 60 * 24) return `${Math.floor(mins / 60)} hr ago`;
+  const d = new Date(at);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
+
+export const money = (n: number) => "₹" + n.toLocaleString("en-IN");
+
+/* ---------- Bookings ---------- */
 
 /** A confirmed booking: one visit, or a course of repeat visits. */
 export type Booking = {
   serviceId: string;
-  patientId: string;
-  startOffset: number; // days from today for the first visit
+  patient: Patient; // copied at booking time, so later edits do not change the booking
+  addressText: string;
+  cityId: string;
+  startDate: string; // yyyy-mm-dd of the first visit
   slot: string;
   visits: number;
   everyDays: number; // 1 = every day, 2 = every 2 days
@@ -19,17 +89,32 @@ export type Booking = {
   rotateFrom: number; // visit number from which "any available" rotation starts
   womenOnly: boolean;
   language: string | null;
-  cityId: string;
   vitalIds: string[]; // checks chosen for a vitals visit
+  unitPrice: number; // service price per visit
+  urgentFee: number;
+  pay: PayMethod;
+  notifyContact: boolean; // send visit updates to the emergency contact
 };
 
-export type VisitRecord = { title: string; when: string; who: string; by: string; note: string };
+export type VisitRecord = {
+  id: string;
+  status: "completed" | "cancelled";
+  title: string;
+  when: string;
+  who: string;
+  by: string;
+  note: string;
+  readings: { name: string; value: string }[];
+};
 
 /** The choices a patient makes before confirming. */
 export type Draft = {
+  patients: Patient[];
+  addresses: Address[];
   serviceId: string;
   patientId: string;
-  dateIdx: number;
+  addressId: string | null;
+  dateIdx: number; // days from today
   slot: string | null;
   repeat: boolean;
   count: number;
@@ -38,30 +123,10 @@ export type Draft = {
   caregiverId: string;
   womenOnly: boolean; // patient preference
   language: string | null; // patient preference
-  cityId: string;
   vitalIds: string[]; // checks chosen for a vitals visit
 };
 
-const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-export function dayAt(offset: number) {
-  const now = new Date();
-  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
-  const short = `${d.getDate()} ${MONTHS[d.getMonth()]}`;
-  const word = offset === 0 ? "Today" : offset === 1 ? "Tomorrow" : DAYS[d.getDay()];
-  return { weekday: offset === 0 ? "Today" : DAYS[d.getDay()], date: d.getDate(), short, full: `${word}, ${short}` };
-}
-
-export const money = (n: number) => "₹" + n.toLocaleString("en-IN");
-
 export const serviceById = (id: string) => SERVICES.find((s) => s.id === id) ?? SERVICES[0];
-export const patientById = (id: string) => PATIENTS.find((p) => p.id === id) ?? PATIENTS[0];
-
-export const cityById = (id: string) => CITIES.find((c) => c.id === id) ?? CITIES[0];
-export const addressIn = (city: City) => `${HOUSE}, ${city.area}, ${city.name}`;
-/** Language choices offered in a city: its own language, plus Hindi and English. */
-export const languagesIn = (city: City) => [city.language, "Hindi", "English"];
 
 /** A caregiver as shown to a patient in one city. */
 export type ListedCaregiver = Caregiver & { regLine: string };
@@ -102,10 +167,13 @@ export const proofText = (c: Caregiver) =>
 export const allowedText = (c: Caregiver) =>
   c.isNurse ? "Injections, IV drips, medication, dressing, vitals" : "Dressing and vitals only";
 
+const NOBODY: Patient = { id: "", name: "You", relation: SELF, age: null, gender: "" };
+
 export function describeDraft(d: Draft) {
   const service = serviceById(d.serviceId);
-  const patient = patientById(d.patientId);
-  const city = cityById(d.cityId);
+  const patient = describePatient(d.patients.find((p) => p.id === d.patientId) ?? d.patients[0] ?? NOBODY);
+  const address = d.addresses.find((a) => a.id === d.addressId) ?? d.addresses[0] ?? null;
+  const city = cityById(address ? address.cityId : CITIES[0].id);
   const allowed = caregiversFor(service, city);
   const visits = d.repeat ? d.count : 1;
   const slot = d.slot ?? SLOTS[1];
@@ -123,7 +191,8 @@ export function describeDraft(d: Draft) {
     service,
     patient,
     city,
-    address: addressIn(city),
+    address,
+    addressText: address ? formatAddress(address) : "",
     languages: languagesIn(city),
     caregivers,
     noWomenFree: d.womenOnly && caregivers.length === 0 && withoutGender.length > 0,
@@ -131,6 +200,7 @@ export function describeDraft(d: Draft) {
     caregiver,
     visits,
     slot,
+    startDate: addDays(todayISO(), d.dateIdx),
     checks,
     unitPrice,
     urgent,
@@ -149,9 +219,8 @@ export function describeDraft(d: Draft) {
 
 export function describeBooking(b: Booking) {
   const service = serviceById(b.serviceId);
-  const patient = patientById(b.patientId);
-  // Later visits of an "any available" course still respect the patient's preferences.
   const city = cityById(b.cityId);
+  // Later visits of an "any available" course still respect the patient's preferences.
   const preferred = caregiversFor(service, city).filter(
     (c) => (isFreeAt(c, b.slot) && matchesPreferences(c, b.womenOnly, b.language)) || c.id === b.caregiverId,
   );
@@ -159,19 +228,49 @@ export function describeBooking(b: Booking) {
   const firstIdx = Math.max(0, list.findIndex((c) => c.id === b.caregiverId));
   // "Any available" has no real matching yet, so the demo rotates through the list.
   const caregiver = b.sameCaregiver ? list[firstIdx] : list[(firstIdx + b.visitNo - b.rotateFrom) % list.length];
-  const offset = b.startOffset + (b.visitNo - 1) * b.everyDays;
+  const visitDate = addDays(b.startDate, (b.visitNo - 1) * b.everyDays);
   const isCourse = b.visits > 1;
   return {
     service,
-    patient,
+    patient: describePatient(b.patient),
     caregiver,
     readings: readingsFor(service, b.vitalIds),
     who: roleWord(service),
-    when: `${dayAt(offset).full}, ${b.slot}`,
-    nextWhen: `${dayAt(offset + b.everyDays).full}, ${b.slot}`,
+    visitDate,
+    when: `${dayInfo(visitDate).full}, ${b.slot}`,
+    nextWhen: `${dayInfo(addDays(visitDate, b.everyDays)).full}, ${b.slot}`,
     isCourse,
     hasNext: isCourse && b.visitNo < b.visits,
+    remaining: b.visits - b.visitNo + 1,
     visitLabel: `Visit ${b.visitNo} of ${b.visits}`,
     planText: b.everyDays === 1 ? "every day" : "every 2 days",
   };
 }
+
+/* ---------- Cancelling and rescheduling ---------- */
+
+/**
+ * SAMPLE POLICY. Step: 0 accepted, 1 on the way, 2 arrived, 3 care in progress.
+ * - Before the caregiver sets off: free.
+ * - After they set off: the home visit charge is kept.
+ * - Once care has started: cannot be cancelled.
+ * The same wording is in the FAQ in lib/data.ts. Change both together.
+ */
+export function cancelTerms(b: Booking, step: number, scope: "one" | "all") {
+  const remaining = b.visits - b.visitNo + 1;
+  const count = scope === "all" ? remaining : 1;
+  const gross = (b.unitPrice + VISIT_FEE) * count + (b.visits === 1 ? b.urgentFee : 0);
+  const kept = step >= 1 ? VISIT_FEE : 0;
+  const paidOnline = b.pay !== "cash";
+  return {
+    allowed: step < 3,
+    count,
+    kept,
+    paidOnline,
+    refund: paidOnline ? gross - kept : 0,
+    due: paidOnline ? 0 : kept,
+  };
+}
+
+/** A visit can move to another day or time until the caregiver sets off. Urgent visits cannot. */
+export const canReschedule = (b: Booking, step: number) => step === 0 && b.slot !== URGENT_SLOT;

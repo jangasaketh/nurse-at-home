@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import { useApp } from "@/lib/store";
-import { ARRIVAL_CODE, FAMILY_CONTACT } from "@/lib/data";
-import { describeBooking } from "@/lib/booking";
+import { ARRIVAL_CODE } from "@/lib/data";
+import { canReschedule, describeBooking, newId } from "@/lib/booking";
 import { Icon, Star } from "./Icon";
 import { BottomBar, Header } from "./ui";
 
 /* Live visit tracking */
 export function TrackingScreen() {
-  const { state, set, go } = useApp();
+  const { state, set, go, open, notify } = useApp();
   const [sos, setSos] = useState(false);
   const [contactNote, setContactNote] = useState(false);
 
@@ -31,21 +31,33 @@ export function TrackingScreen() {
 
   // There is no live nurse yet, so this button stands in for real status updates.
   const advance = () => {
-    if (step < 3) return set({ step: step + 1 });
+    if (step < 3) {
+      set({ step: step + 1 });
+      if (step === 0) notify(`${first} is on the way`, `${b.service.name} for ${b.patient.name}. ${b.caregiver.distance} away.`);
+      if (step === 1) notify(`${first} has arrived`, "Share your arrival code at the door to start the visit.");
+      return;
+    }
     set({
       screen: "done",
+      trail: [],
       history: [
         {
+          id: newId("v"),
+          status: "completed",
           title: b.isCourse ? `${b.service.name}, visit ${booking.visitNo} of ${booking.visits}` : b.service.name,
           when: b.when,
           who: b.patient.chip === "Me" ? "You" : b.patient.chip,
           by: b.caregiver.name,
           note: b.service.note,
+          readings: b.readings.map((r) => ({ name: r.name, value: r.sample })),
         },
         ...state.history,
       ],
     });
+    notify("Visit completed", `The record of your ${b.service.name.toLowerCase()} visit is saved under Records.`);
   };
+
+  const watcher = booking.notifyContact ? state.contact : null;
 
   return (
     <div className="screen">
@@ -60,7 +72,8 @@ export function TrackingScreen() {
           <div role="alert" className="danger-box stack-sm">
             <div className="strong">Emergency help</div>
             <div style={{ fontSize: 15 }}>
-              Call 112 now. In the real app this button also alerts our support team and your emergency contact.
+              Call 112 now. In the real app this button also alerts our support team
+              {state.contact ? ` and ${state.contact.name} (+91 ${state.contact.phone})` : " and your emergency contact, once you add one in Profile"}.
             </div>
           </div>
         )}
@@ -97,8 +110,8 @@ export function TrackingScreen() {
           </p>
         )}
 
-        {state.notifyFamily && (
-          <p className="small muted">{FAMILY_CONTACT} is getting updates on this visit.</p>
+        {watcher && (
+          <p className="small muted">{watcher.name} is getting updates on this visit.</p>
         )}
 
         <div className="warn-box between" style={{ padding: "14px 16px" }}>
@@ -117,6 +130,18 @@ export function TrackingScreen() {
             </div>
           ))}
         </div>
+
+        {step < 3 && (
+          <div className="stack">
+            <h2>Need to change this visit?</h2>
+            <div className="actions">
+              {canReschedule(booking, step) && (
+                <button type="button" className="btn btn-outline" onClick={() => open("reschedule")}>Reschedule</button>
+              )}
+              <button type="button" className="btn btn-danger" style={{ minHeight: 48 }} onClick={() => open("cancel")}>Cancel visit</button>
+            </div>
+          </div>
+        )}
 
         <button type="button" className="btn btn-demo" onClick={advance}>{demoLabels[step]}</button>
       </div>
@@ -137,8 +162,8 @@ export function DoneScreen() {
 
   const finish = () => {
     // A course moves on to its next visit. A single visit, or the last one, closes the booking.
-    if (b.hasNext) set({ booking: { ...booking, visitNo: booking.visitNo + 1 }, step: 0, screen: "home" });
-    else set({ booking: null, step: 0, screen: "home" });
+    if (b.hasNext) set({ booking: { ...booking, visitNo: booking.visitNo + 1 }, step: 0, screen: "home", trail: [] });
+    else set({ booking: null, step: 0, screen: "home", trail: [] });
   };
 
   return (

@@ -222,3 +222,51 @@ label { font-size: 14px; font-weight: 600; }
 .check-row input { width: 24px; height: 24px; margin: 10px; accent-color: var(--primary); flex: none; cursor: pointer; }
 .check-name { flex: 1; min-width: 0; min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .check-info { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px 14px; border-top: 1px solid var(--line); font-size: 15px; }
+
+/* ---------- Forms ---------- */
+.text-input { width: 100%; min-height: 52px; padding: 0 14px; border: 1.5px solid var(--line-strong); border-radius: 14px; background: var(--surface); font-size: 17px; }
+.text-input.invalid { border-color: var(--danger); }
+textarea.text-input { padding: 12px 14px; min-height: 110px; resize: vertical; line-height: 1.4; }
+.btn:disabled { opacity: 0.65; cursor: default; }
+.chip[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; border-style: dashed; }
+.chip .sub { display: block; font-size: 12px; font-weight: 400; }
+.btn-plain { min-height: 48px; font-size: 16px; color: var(--muted); }
+.btn-danger-solid { background: var(--danger); color: #ffffff; }
+.text-link { color: var(--primary); font-weight: 600; text-decoration: underline; min-height: 32px; display: inline; }
+
+/* ---------- Lists you can tap ---------- */
+.list { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+.list-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 58px; padding: 10px 16px; border-bottom: 1px solid #edf1ee; }
+.list-row:last-child { border-bottom: 0; }
+.list-row .end { display: flex; align-items: center; gap: 6px; color: var(--muted); flex: none; }
+.add-row { color: var(--primary); font-weight: 600; justify-content: flex-start; }
+.actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+
+/* ---------- Loading, error, empty ---------- */
+.state-box { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 28px 20px; background: var(--surface); border: 1px dashed var(--line-strong); border-radius: 16px; }
+.state-box .btn { margin-top: 6px; }
+.state-icon { width: 48px; height: 48px; border-radius: 50%; background: var(--primary-tint); color: var(--primary); display: flex; align-items: center; justify-content: center; }
+.state-icon.danger { background: var(--danger-bg); color: var(--danger); }
+.skeleton-card { display: flex; flex-direction: column; gap: 10px; }
+.skeleton-line { height: 14px; border-radius: 7px; background: #e3e9e5; }
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton-line { animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.45; } }
+}
+.offline { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: var(--warn-bg); color: var(--warn-ink); font-size: 14px; font-weight: 500; border-bottom: 1px solid var(--warn-line); }
+.splash { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: var(--surface); }
+
+/* ---------- Home header, notifications, help ---------- */
+.home-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.bell { position: relative; width: 44px; height: 44px; border-radius: 50%; background: var(--surface); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; flex: none; }
+.badge { position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--danger); color: #ffffff; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+.notice { display: flex; gap: 12px; align-items: flex-start; }
+.notice .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--primary); margin-top: 6px; flex: none; }
+.notice.read .dot { background: transparent; border: 1.5px solid var(--line-strong); }
+.faq-q { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 56px; padding: 10px 16px; font-weight: 600; }
+.faq-a { padding: 0 16px 14px; font-size: 15px; color: var(--ink-soft); }
+.legal-note { background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn-ink); border-radius: 14px; padding: 12px 14px; font-size: 14px; }
+
+.pill-off { background: #eceeed; color: var(--muted); flex: none; }
+.actions > :only-child { grid-column: 1 / -1; }
+textarea { font: inherit; color: inherit; }

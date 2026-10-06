@@ -1,4 +1,4 @@
-// SAMPLE DATA. Every name, price, rating and review here is a placeholder.
+// SAMPLE DATA. Every caregiver name, price, rating and review here is a placeholder.
 // When the backend exists, these lists come from the API instead.
 
 import type { IconName } from "@/components/Icon";
@@ -129,14 +129,6 @@ export const SERVICES: Service[] = [
   },
 ];
 
-export type Patient = { id: string; name: string; chip: string; meta: string; full: string };
-
-export const PATIENTS: Patient[] = [
-  { id: "p1", name: "Kavya", chip: "Me", meta: "You, 34", full: "Kavya (you), 34" },
-  { id: "p2", name: "Lakshmi", chip: "Lakshmi · Mother", meta: "Mother, 62", full: "Lakshmi (mother), 62" },
-  { id: "p3", name: "Ramesh", chip: "Ramesh · Father", meta: "Father, 68", full: "Ramesh (father), 68" },
-];
-
 export type Caregiver = {
   id: string;
   name: string;
@@ -172,13 +164,11 @@ export const CITIES: City[] = [
   { id: "trv", name: "Thiruvananthapuram", state: "Kerala", language: "Malayalam", area: "Kowdiar" },
 ];
 
-export const HOUSE = "Flat 204, Green Park Residency"; // sample address; the area comes from the city
 export const VISIT_FEE = 49; // home visit charge per visit, rupees
 // Early-morning and late-night slots are on purpose: insulin before breakfast, night-time injections.
 export const SLOTS = ["6:00 AM", "9:00 AM", "12:00 PM", "4:00 PM", "7:00 PM", "10:00 PM"];
 export const URGENT_SLOT = "within 60 minutes";
 export const URGENT_FEE = 100; // extra charge for "As soon as possible", rupees
-export const FAMILY_CONTACT = "Suresh (brother)";
 export const VISIT_COUNTS = [3, 5, 7, 10, 14];
 export const ARRIVAL_CODE = "4821";
 
@@ -252,7 +242,82 @@ export const VITAL_CHECKS: VitalCheck[] = [
 // Readings a nurse notes on every visit, whatever the service.
 export const ROUTINE_CHECK_IDS = ["bp", "pulse", "temp", "spo2"];
 
-export const SAMPLE_PAST_VISITS = [
-  { title: "Wound dressing", when: "28 Sep, 9:00 AM", who: "Ramesh · Father", by: "Ravi Kumar", note: "Stitches site cleaned and re-dressed. Healing well, no swelling." },
-  { title: "Vitals check", when: "21 Sep, 6:30 PM", who: "Lakshmi · Mother", by: "Sunita Yadav", note: "BP 134/86 mmHg, fasting sugar 118 mg/dL, SpO2 97%." },
+// ---------- Account, bookings and support ----------
+
+export const RELATIONS = ["Mother", "Father", "Spouse", "Son", "Daughter", "Brother", "Sister", "Grandparent", "Other"];
+export const ADDRESS_LABELS = ["Home", "Work", "Parents' home", "Other"];
+
+export const CANCEL_REASONS = [
+  "The patient is feeling better",
+  "The doctor changed the treatment",
+  "I need a different day or time",
+  "I booked by mistake",
+  "Something else",
 ];
+
+// PLACEHOLDERS: put your real support details here before launch.
+export const SUPPORT = {
+  phone: "[Your support number]",
+  whatsapp: "[Your WhatsApp number]",
+  email: "[Your support email]",
+  hours: "[Your support hours]",
+};
+
+export const HELP_TOPICS = ["A visit that went wrong", "Payment or refund", "The app is not working", "Something else"];
+
+export const FAQ = [
+  {
+    q: "How are nurses and compounders checked?",
+    a: "Before anyone can take a booking we check a government ID and their qualification certificate. For nurses we also check their registration with the state nursing council. The registration number is shown on every profile.",
+  },
+  {
+    q: "Why do I need a prescription?",
+    a: "Injections, IV drips and scheduled medication are given only against a doctor's prescription. We do not arrange doctor consultations, so please get it from your own doctor. Dressing and vitals checks do not need one.",
+  },
+  {
+    q: "What can a compounder do?",
+    a: "Compounders are trained helpers, not registered nurses. They do wound dressing and vitals checks only. Injections, drips and medication always go to a registered nurse.",
+  },
+  {
+    // SAMPLE POLICY: matches cancelTerms() in lib/booking.ts. Change both together.
+    q: "Can I cancel or change a booking?",
+    a: "Yes, from the Bookings tab. Cancelling is free until the nurse sets off. After that the home visit charge is kept. Once care has started the visit cannot be cancelled. You can move a visit to another day or time until the nurse sets off.",
+  },
+  {
+    q: "What if the nurse is late or does not come?",
+    a: "[Write your policy here, for example a full refund or a free re-booking.]",
+  },
+  {
+    q: "Is this for emergencies?",
+    a: "No. For chest pain, heavy bleeding, trouble breathing or signs of a stroke, call 112.",
+  },
+];
+
+// PLACEHOLDER legal pages. A lawyer must write the real text. These are only the headings to cover.
+export const LEGAL = {
+  terms: {
+    title: "Terms of Use",
+    points: [
+      "Who can use the app, and booking on behalf of family members",
+      "What the service is: connecting patients with verified nurses and compounders. It is not an emergency service",
+      "Prescription rule for injections, IV drips and medication",
+      "Bookings, cancellations and refunds",
+      "Prices, payments and the urgent visit charge",
+      "Behaviour and safety during a home visit",
+      "Limits of liability",
+      "Complaints and the grievance officer",
+    ],
+  },
+  privacy: {
+    title: "Privacy Policy",
+    points: [
+      "What we collect: phone number, name, address, family members, prescriptions, visit notes and readings, location during a visit",
+      "Why we collect it, and the consent you gave",
+      "Who sees it: the caregiver you book, and the family contact you choose",
+      "How it is stored and protected",
+      "Your rights: to see, correct or delete your data, and to withdraw consent",
+      "How long records are kept",
+      "Who to contact with a complaint",
+    ],
+  },
+};

@@ -2,22 +2,23 @@
 
 import { useState } from "react";
 import { useApp } from "@/lib/store";
-import { FAMILY_CONTACT, SAMPLE_REVIEWS, SLOTS, URGENT_FEE, URGENT_SLOT, VISIT_COUNTS, VITAL_CHECKS } from "@/lib/data";
+import { SAMPLE_REVIEWS, SLOTS, URGENT_FEE, URGENT_SLOT, VISIT_COUNTS, VITAL_CHECKS } from "@/lib/data";
 import { allowedText, dayAt, describeDraft, isVitals, money, prescriptionMissing, proofText } from "@/lib/booking";
+import { useAction, useLoad } from "@/lib/fake-api";
 import { Icon, Star } from "./Icon";
-import { BottomBar, Chip, Header, RadioCard, Rows } from "./ui";
+import { ActionError, BottomBar, CheckRow, Chip, ErrorState, Header, RadioCard, Rows, Skeleton } from "./ui";
 
 /* 1. Service details, with the prescription gate */
 export function ServiceScreen() {
-  const { state, set, go } = useApp();
-  const { service, patient, address, unitPrice } = describeDraft(state);
+  const { state, set, go, open } = useApp();
+  const { service, patient, address, addressText, unitPrice } = describeDraft(state);
   const [error, setError] = useState(false);
   const [openInfo, setOpenInfo] = useState<string | null>(null);
   const pickChecks = isVitals(service);
   const noChecks = pickChecks && state.vitalIds.length === 0;
 
   const next = () => {
-    if (prescriptionMissing(service, state.hasPrescription) || noChecks) setError(true);
+    if (prescriptionMissing(service, state.hasPrescription) || noChecks || !address) setError(true);
     else go("schedule");
   };
 
@@ -98,7 +99,21 @@ export function ServiceScreen() {
           <div className="kv"><span className="k">You keep ready</span><span>{service.youKeepReady}</span></div>
         </div>
 
-        <Rows items={[{ k: "Patient", v: patient.full }, { k: "Address", v: address }]} />
+        {address ? (
+          <Rows items={[{ k: "Patient", v: patient.full }, { k: "Address", v: addressText }]} />
+        ) : (
+          <div className="warn-box stack" style={{ gap: 12 }}>
+            <div className="stack-xs">
+              <h2>Where should the {service.nurseOnly ? "nurse" : "caregiver"} come?</h2>
+              <div className="sub">Add an address to continue with this booking.</div>
+            </div>
+            <button type="button" className="btn btn-warn" onClick={() => open("address", { editingId: null })}>
+              <Icon name="plus" size={20} />
+              Add address
+            </button>
+            {error && <div role="alert" className="error">Add an address to continue.</div>}
+          </div>
+        )}
 
         {service.needsPrescription && (
           <div className="warn-box stack" style={{ gap: 12 }}>
@@ -258,6 +273,7 @@ export function ScheduleScreen() {
 export function CaregiverListScreen() {
   const { state, set, go } = useApp();
   const d = describeDraft(state);
+  const load = useLoad(state.simulateFailure);
 
   const title = d.isCourse
     ? state.sameNurse
@@ -299,7 +315,12 @@ export function CaregiverListScreen() {
           </div>
         </div>
 
-        {d.noWomenFree && (
+        {load.status === "loading" && <Skeleton rows={3} />}
+        {load.status === "error" && (
+          <ErrorState title={`We could not find ${d.who}s near you`} body="Check your internet connection and try again." onRetry={load.retry} />
+        )}
+
+        {load.status === "ready" && d.noWomenFree && (
           <div className="warn-box stack" style={{ gap: 12 }}>
             <div className="stack-xs">
               <h2>No woman {d.who} is free near you at this time</h2>
@@ -317,7 +338,7 @@ export function CaregiverListScreen() {
           </div>
         )}
 
-        {d.caregivers.length === 0 && !d.noWomenFree && (
+        {load.status === "ready" && d.caregivers.length === 0 && !d.noWomenFree && (
           <div className="dashed-box stack">
             <div className="muted">No {d.who} matches these preferences at this time.</div>
             <button type="button" className="link-btn" onClick={() => set({ womenOnly: false, language: null })}>Clear preferences</button>
@@ -325,7 +346,7 @@ export function CaregiverListScreen() {
           </div>
         )}
 
-        {d.caregivers.map((c) => (
+        {load.status === "ready" && d.caregivers.map((c) => (
           <button type="button" key={c.id} className="card card-btn" onClick={() => set({ caregiverId: c.id, screen: "caregiver" })}>
             <span className="row-inline" style={{ gap: 12, width: "100%" }}>
               <span className="avatar" style={{ width: 52, height: 52, fontSize: 18 }}>{c.initials}</span>
@@ -426,8 +447,10 @@ const PAY_OPTIONS = [
 ] as const;
 
 export function ReviewScreen() {
-  const { state, set, go } = useApp();
+  const { state, set, go, open, notify } = useApp();
   const d = describeDraft(state);
+  const action = useAction(state.simulateFailure);
+  const contact = state.contact;
   const times = d.isCourse ? ` × ${d.visits}` : "";
 
   const caregiverLine = d.isCourse
@@ -442,32 +465,41 @@ export function ReviewScreen() {
     { k: "Patient", v: d.patient.full },
     { k: d.isCourse ? "First visit" : "When", v: d.whenText },
     ...(d.isCourse ? [{ k: "Course", v: `${d.visits} visits, ${d.everyText}, until ${d.lastDay}` }] : []),
-    { k: "Where", v: d.address },
+    { k: "Where", v: d.addressText },
     { k: "Caregiver", v: caregiverLine },
     { k: "Prescription", v: d.service.needsPrescription ? (state.hasPrescription ? "Added" : "Not added yet") : "Not needed" },
   ];
 
   // TODO: take payment (Razorpay) and create the booking through the API.
   const confirm = () =>
-    set({
-      booking: {
-        serviceId: d.service.id,
-        patientId: d.patient.id,
-        startOffset: state.dateIdx,
-        slot: d.slot,
-        visits: d.visits,
-        everyDays: state.every,
-        sameCaregiver: state.sameNurse,
-        caregiverId: d.caregiver.id,
-        visitNo: 1,
-        rotateFrom: 1,
-        womenOnly: state.womenOnly,
-        language: state.language,
-        cityId: state.cityId,
-        vitalIds: state.vitalIds,
-      },
-      step: 0,
-      screen: "tracking",
+    action.run(() => {
+      set({
+        booking: {
+          serviceId: d.service.id,
+          patient: { id: d.patient.id, name: d.patient.name, relation: d.patient.relation, age: d.patient.age, gender: d.patient.gender },
+          addressText: d.addressText,
+          cityId: d.city.id,
+          startDate: d.startDate,
+          slot: d.slot,
+          visits: d.visits,
+          everyDays: state.every,
+          sameCaregiver: state.sameNurse,
+          caregiverId: d.caregiver.id,
+          visitNo: 1,
+          rotateFrom: 1,
+          womenOnly: state.womenOnly,
+          language: state.language,
+          vitalIds: state.vitalIds,
+          unitPrice: d.unitPrice,
+          urgentFee: d.urgentFee,
+          pay: state.pay,
+          notifyContact: state.notifyFamily && contact !== null,
+        },
+        step: 0,
+        screen: "tracking",
+        trail: [],
+      });
+      notify("Booking confirmed", `${d.service.name} for ${d.patient.name}, ${d.whenText}, with ${d.caregiver.name}.`);
     });
 
   return (
@@ -493,13 +525,18 @@ export function ReviewScreen() {
           ))}
         </div>
 
-        <label className="check-card" htmlFor="notify-family">
-          <input id="notify-family" type="checkbox" checked={state.notifyFamily} onChange={(e) => set({ notifyFamily: e.target.checked })} />
-          <span className="stack-xs">
-            <span className="strong">Send visit updates to {FAMILY_CONTACT}</span>
-            <span className="small muted">A message when the {d.who} arrives and when the visit ends.</span>
-          </span>
-        </label>
+        {contact ? (
+          <CheckRow id="notify-family" checked={state.notifyFamily} onChange={(v) => set({ notifyFamily: v })}>
+            <span className="stack-xs">
+              <span className="strong">Send visit updates to {contact.name} ({contact.relation.toLowerCase()})</span>
+              <span className="small muted">A message when the {d.who} arrives and when the visit ends.</span>
+            </span>
+          </CheckRow>
+        ) : (
+          <button type="button" className="link-btn" onClick={() => open("contact")}>
+            Add a family contact to send them visit updates
+          </button>
+        )}
 
         <p className="small muted">
           {d.isCourse
@@ -508,8 +545,9 @@ export function ReviewScreen() {
         </p>
       </div>
       <BottomBar>
-        <button type="button" className="btn btn-primary" onClick={confirm}>
-          {d.isCourse ? `Confirm ${d.visits} visits · ${money(d.total)}` : `Confirm booking · ${money(d.total)}`}
+        {action.failed && <ActionError>The booking did not go through, and you have not been charged. Check your internet connection and try again.</ActionError>}
+        <button type="button" className="btn btn-primary" disabled={action.busy} onClick={confirm}>
+          {action.busy ? "Confirming…" : d.isCourse ? `Confirm ${d.visits} visits · ${money(d.total)}` : `Confirm booking · ${money(d.total)}`}
         </button>
       </BottomBar>
     </div>

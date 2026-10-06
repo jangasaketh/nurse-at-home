@@ -2,7 +2,7 @@
 
 Web app for booking verified nurses and compounders for home visits: injections, IV drips, wound dressing, elder care dressing, scheduled medication and vitals checks.
 
-This is the **frontend only**. It runs on sample data held in memory, so nothing is saved and refreshing the page starts again. "Nurse at Home" is a placeholder name.
+This is the **frontend only**. There is no server yet. Caregivers, prices and ratings are sample data. What a person enters (name, family, addresses, bookings) is saved in their own browser, so it survives a refresh on that device but is not shared with any other device. "Nurse at Home" is a placeholder name.
 
 ## Run it on your computer
 
@@ -15,77 +15,91 @@ npm run dev
 
 Open http://localhost:3000. To log in, keep the sample mobile number and type any 6 digits as the OTP.
 
-## Put it in your Git repository
-
-Create an empty repository on GitHub first, then run these inside this folder:
-
-```bash
-git init
-git add .
-git commit -m "Patient app frontend"
-git branch -M main
-git remote add origin https://github.com/YOUR-USERNAME/YOUR-REPO.git
-git push -u origin main
-```
-
-## Put it online to test on phones and other browsers
-
-The quickest way is Vercel or Netlify. Both read the code from GitHub and give you a public link.
-
-1. Push the code to GitHub (steps above).
-2. Sign in to vercel.com or netlify.com with your GitHub account.
-3. Choose "Add new project" (Vercel) or "Import from Git" (Netlify) and pick this repository.
-4. Keep the default settings and deploy. Next.js is detected automatically.
-5. Open the link on any phone, tablet or browser. Every later `git push` updates it.
-
-## Or host it on GitHub Pages
+## Host it on GitHub Pages
 
 A Next.js project has no `index.html` until it is built, so GitHub Pages needs a workflow that builds it first.
 
 1. Keep `next.config.mjs` in the same folder as `package.json`.
 2. In the repository, open Settings, then Pages, and set Source to "GitHub Actions".
-3. Add the workflow file `deploy.yml` at `.github/workflows/deploy.yml` (at the top of the repository, not inside the app folder).
-4. Open the Actions tab and wait for "Deploy to GitHub Pages" to finish. The page is at `https://YOUR-USERNAME.github.io/YOUR-REPO/`.
+3. Keep the workflow file at `.github/workflows/deploy.yml`.
+4. Every commit rebuilds the page. The Actions tab shows progress. The page is at `https://YOUR-USERNAME.github.io/YOUR-REPO/`.
+
+Vercel and Netlify also work: import the repository and deploy with the default settings.
 
 ## What to test
 
-- Login: wrong-length mobile number and OTP show errors.
-- Home: "Change" switches between Hyderabad, Bengaluru, Mumbai, Chennai and Thiruvananthapuram. The address, the caregivers' languages and the state nursing council on each profile follow the city.
-- Injection, IV drip and medication cannot go past the service screen without a prescription. There is no doctor consultation route.
+**First login**
+- After the OTP, a new user is asked for a name and must tick two consents. The Terms and Privacy pages open from there.
+- Next comes the first address. "Skip for now" is allowed, but Home then asks for an address and a booking cannot continue without one.
+- Log out and log in again: the name screen is not shown a second time.
+
+**Family and addresses**
+- Home: "Add family member" adds a person and selects them. Profile: tap a person to edit or remove them.
+- Home: "Change" next to the address opens the saved addresses. Add one in another city and the caregivers' languages and state nursing council follow it.
+- Profile: add an emergency contact. Review then offers to send that person visit updates.
+
+**Booking**
+- Injection, IV drip and medication cannot go past the service screen without a prescription.
 - Those three services list registered nurses only. Dressing and vitals also list the compounder.
-- Service details show who brings what (supplies versus medicine).
-- Vitals check: tick one or more checks (blood pressure, sugar, temperature, oxygen, pulse, weight). Tapping a name shows what it is and how to prepare. The price is the total of the ticked checks, and only those readings appear on the visit record.
-- Date and time: a single visit today can be booked "As soon as possible" (within 60 minutes) for an extra charge, shown as its own line on the review screen. Slots run from 6:00 AM to 10:00 PM.
-- Caregiver list: "Women only" and language preferences (the city's language, Hindi, English) filter the list. With "Women only" on at 10:00 PM, no woman is free in the sample data, so the app offers to show male nurses or pick another time. Each profile shows the registration number, and the compounder is labelled as not a registered nurse.
-- Review: tick "Send visit updates" and the tracking screen confirms the family contact is being updated.
-- Date and time: "Repeat visits" lets you choose 3 to 14 visits, every day or every 2 days, with the same nurse or any available nurse.
-- Review shows the price multiplied by the number of visits.
-- Tracking: the dashed "Prototype" button moves the visit forward, because there is no live nurse yet.
-- After a visit: the record appears under Records, and a course moves on to "Visit 2 of 5".
-- Bookings: a course can be switched between same nurse and any nurse.
+- Vitals check: tick one or more checks; tap a name for details. The price is the total of the ticked checks.
+- "As soon as possible" adds an urgent charge. "Repeat visits" books a course with the same nurse or any available nurse.
+- "Women only" at 10:00 PM has no match in the sample data, so the app offers male nurses or another time.
+
+**Changing a booking**
+- Bookings tab or the visit screen: Reschedule and Cancel visit.
+- Reschedule works until the nurse sets off. Times when the booked nurse is busy are greyed out.
+- Cancel is free until the nurse sets off; after that the home visit charge is kept; once care has started it is not possible. A course can cancel one visit or all remaining visits.
+
+**Notifications, help, records**
+- The bell on Home counts unread messages. They are created when a booking is confirmed, moved or cancelled, when the nurse sets off and arrives, and when a visit ends.
+- Profile, Help and support: questions and answers, contact details, and a "Report a problem" form.
+- After a visit the notes and readings appear under Records.
+
+**Loading and error screens**
+- Lists show grey placeholder cards for half a second while they "load".
+- Profile, Prototype tools, "Pretend the internet is failing": every list fails the first time and shows "Try again"; booking, cancelling and moving a visit fail once with a message, then work.
+- Turn off your Wi-Fi: a yellow "You are offline" strip appears at the top.
+- "Erase all data and start again" wipes what is saved on the device.
+
+## Placeholders to replace before launch
+
+| What | Where |
+| --- | --- |
+| Prices, urgent charge, home visit charge | `lib/data.ts` |
+| Support phone, WhatsApp, email, hours | `SUPPORT` in `lib/data.ts` |
+| "What if the nurse is late" answer | `FAQ` in `lib/data.ts` |
+| Cancellation and refund policy | `cancelTerms()` in `lib/booking.ts`, and the matching FAQ answer |
+| Terms of Use and Privacy Policy text | `LEGAL` in `lib/data.ts` (a lawyer must write these) |
+| Prototype tools block | `ProfileScreen` in `components/TabScreens.tsx` (delete it) |
 
 ## Where things are
 
 | Path | What it holds |
 | --- | --- |
-| `app/page.tsx` | Chooses which screen to show |
+| `app/page.tsx` | Chooses which screen to show; offline strip |
 | `app/globals.css` | All colours, fonts and styles. Change `--primary` to re-colour the app |
-| `lib/data.ts` | Sample services, prices, caregivers and patients |
-| `lib/booking.ts` | Booking rules: who may do which service, prescription check, prices, repeat visits |
-| `lib/store.tsx` | App state (in memory for now) |
-| `components/AuthScreens.tsx` | Login and OTP |
+| `lib/data.ts` | Sample services, prices, caregivers, cities, questions and answers |
+| `lib/booking.ts` | Rules: who may do which service, prescription check, prices, repeat visits, cancel and reschedule policy |
+| `lib/store.tsx` | App state, saved in the browser |
+| `lib/fake-api.ts` | Stand-ins for network calls, so loading and error screens can be seen |
+| `components/AuthScreens.tsx` | Login, OTP, first-login name and consent |
 | `components/HomeScreen.tsx` | Home |
 | `components/BookingScreens.tsx` | Service details, date and time, caregiver list, caregiver profile, review and pay |
 | `components/VisitScreens.tsx` | Live tracking and visit completed |
+| `components/ManageBookingScreens.tsx` | Cancel and reschedule |
+| `components/AccountScreens.tsx` | Family members, addresses, emergency contact |
+| `components/SupportScreens.tsx` | Notifications, help and support, legal pages |
 | `components/TabScreens.tsx` | Bookings, Records, Profile and the bottom tab bar |
+| `components/ui.tsx` | Shared parts: buttons, form fields, loading, error and empty states |
 
 ## Not built yet
 
 Search for `TODO` in the code to find each spot.
 
-- Real OTP by SMS and user accounts
+- A server and database: real OTP by SMS, accounts that work across devices
 - Prescription photo upload
 - Live map and caregiver location
-- Payments
+- Payments and refunds
 - Calls and chat
-- Saving bookings, records and ratings to a database
+- Real push or SMS notifications (the app only shows its own in-app list)
+- Local-language versions of the screens
