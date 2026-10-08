@@ -5,8 +5,9 @@
 import { useEffect, useState } from "react";
 import { useApp } from "@/lib/store";
 import { FAQ, HELP_TOPICS, LEGAL, SUPPORT } from "@/lib/data";
-import { timeAgo } from "@/lib/booking";
+import { timeAgo, tx } from "@/lib/booking";
 import { useAction, useLoad } from "@/lib/fake-api";
+import { t } from "@/lib/i18n";
 import { Icon } from "./Icon";
 import { ActionError, Chip, EmptyState, ErrorState, Header, Rows, Skeleton } from "./ui";
 
@@ -26,23 +27,23 @@ export function NotificationsScreen() {
 
   return (
     <div className="screen">
-      <Header title="Notifications" onBack={() => back()} />
+      <Header title={t("Notifications")} onBack={() => back()} />
       <div className="scroll">
         {load.status === "loading" && <Skeleton rows={3} />}
-        {load.status === "error" && <ErrorState title="We could not load your notifications" onRetry={load.retry} />}
+        {load.status === "error" && <ErrorState title={t("We could not load your notifications")} onRetry={load.retry} />}
         {load.status === "ready" && state.notifications.length === 0 && (
           <EmptyState
             icon="bell"
-            title="Nothing here yet"
-            body="You will see a message here when a booking is confirmed, when the nurse sets off and arrives, and when a visit record is ready."
+            title={t("Nothing here yet")}
+            body={t("You will see a message here when a booking is confirmed, when the nurse sets off and arrives, and when a visit record is ready.")}
           />
         )}
         {load.status === "ready" && state.notifications.map((n) => (
           <div key={n.id} className={`card notice ${fresh.has(n.id) ? "" : "read"}`}>
             <span className="dot" />
             <div className="stack-xs" style={{ minWidth: 0 }}>
-              <span className="strong">{n.title}</span>
-              <span className="small" style={{ color: "var(--ink-soft)" }}>{n.body}</span>
+              <span className="strong">{tx(n.title)}</span>
+              <span className="small" style={{ color: "var(--ink-soft)" }}>{tx(n.body)}</span>
               <span className="tiny muted">{timeAgo(n.at)}</span>
             </div>
           </div>
@@ -70,61 +71,61 @@ export function HelpScreen() {
 
   return (
     <div className="screen">
-      <Header title="Help and support" onBack={() => back()} />
+      <Header title={t("Help and support")} onBack={() => back()} />
       <div className="scroll gap-lg">
         <div className="danger-box stack-sm">
-          <div className="strong">In an emergency, call 112</div>
-          <div className="small">This app is not an emergency service.</div>
+          <div className="strong">{t("In an emergency, call 112")}</div>
+          <div className="small">{t("This app is not an emergency service.")}</div>
         </div>
 
         <div className="stack">
-          <h2>Common questions</h2>
+          <h2>{t("Common questions")}</h2>
           <div className="list">
             {FAQ.map((item, i) => (
               <div key={item.q} style={{ borderBottom: i < FAQ.length - 1 ? "1px solid #edf1ee" : 0 }}>
                 <button type="button" className="faq-q" aria-expanded={openQ === i} onClick={() => setOpenQ(openQ === i ? null : i)}>
-                  <span>{item.q}</span>
+                  <span>{t(item.q)}</span>
                   <span className="muted" style={{ transform: openQ === i ? "rotate(90deg)" : "none", display: "flex" }}><Icon name="next" size={20} /></span>
                 </button>
-                {openQ === i && <div className="faq-a">{item.a}</div>}
+                {openQ === i && <div className="faq-a">{t(item.a)}</div>}
               </div>
             ))}
           </div>
         </div>
 
         <div className="stack">
-          <h2>Talk to us</h2>
+          <h2>{t("Talk to us")}</h2>
           <Rows
             items={[
-              { k: "Phone", v: SUPPORT.phone },
+              { k: t("Phone"), v: SUPPORT.phone },
               { k: "WhatsApp", v: SUPPORT.whatsapp },
-              { k: "Email", v: SUPPORT.email },
-              { k: "Hours", v: SUPPORT.hours },
+              { k: t("Email"), v: SUPPORT.email },
+              { k: t("Hours"), v: SUPPORT.hours },
             ]}
           />
         </div>
 
         <div className="stack">
-          <h2>Report a problem</h2>
+          <h2>{t("Report a problem")}</h2>
           {sent ? (
             <div className="tint-box stack-sm">
-              <div className="strong">We have your message</div>
-              <div className="small" style={{ color: "var(--ink-soft)" }}>Our support team will reply on +91 {state.phone}.</div>
+              <div className="strong">{t("We have your message")}</div>
+              <div className="small" style={{ color: "var(--ink-soft)" }}>{t("Our support team will reply on +91 {phone}.", { phone: state.phone })}</div>
             </div>
           ) : (
             <>
-              <div className="wrap" role="group" aria-label="What is it about?">
-                {HELP_TOPICS.map((t) => (
-                  <Chip key={t} className="chip-toggle" selected={topic === t} onClick={() => setTopic(t)}>{t}</Chip>
+              <div className="wrap" role="group" aria-label={t("What is it about?")}>
+                {HELP_TOPICS.map((topicName) => (
+                  <Chip key={topicName} className="chip-toggle" selected={topic === topicName} onClick={() => setTopic(topicName)}>{t(topicName)}</Chip>
                 ))}
               </div>
-              {tried && !topic && <div role="alert" className="error">Choose what it is about.</div>}
-              <label htmlFor="help-message">What happened?</label>
+              {tried && !topic && <div role="alert" className="error">{t("Choose what it is about.")}</div>}
+              <label htmlFor="help-message">{t("What happened?")}</label>
               <textarea id="help-message" className="text-input" value={message} onChange={(e) => setMessage(e.target.value)} />
-              {tried && message.trim().length < 10 && <div role="alert" className="error">Tell us a little more, at least a sentence.</div>}
-              {action.failed && <ActionError>Your message was not sent. Check your internet connection and try again.</ActionError>}
+              {tried && message.trim().length < 10 && <div role="alert" className="error">{t("Tell us a little more, at least a sentence.")}</div>}
+              {action.failed && <ActionError>{t("Your message was not sent. Check your internet connection and try again.")}</ActionError>}
               <button type="button" className="btn btn-primary" disabled={action.busy} onClick={send}>
-                {action.busy ? "Sending…" : "Send to support"}
+                {action.busy ? t("Sending…") : t("Send to support")}
               </button>
             </>
           )}
@@ -132,10 +133,10 @@ export function HelpScreen() {
 
         <div className="list">
           <button type="button" className="list-row" onClick={() => open("legal", { legalDoc: "terms" })}>
-            <span>Terms of Use</span><span className="end"><Icon name="next" size={18} /></span>
+            <span>{t("Terms of Use")}</span><span className="end"><Icon name="next" size={18} /></span>
           </button>
           <button type="button" className="list-row" onClick={() => open("legal", { legalDoc: "privacy" })}>
-            <span>Privacy Policy</span><span className="end"><Icon name="next" size={18} /></span>
+            <span>{t("Privacy Policy")}</span><span className="end"><Icon name="next" size={18} /></span>
           </button>
         </div>
       </div>
@@ -148,14 +149,14 @@ export function LegalScreen() {
   const doc = LEGAL[state.legalDoc];
   return (
     <div className="screen screen-white">
-      <Header title={doc.title} onBack={() => back()} />
+      <Header title={t(doc.title)} onBack={() => back()} />
       <div className="scroll">
-        <h1>{doc.title}</h1>
+        <h1>{t(doc.title)}</h1>
         <div className="legal-note">
-          Placeholder. The real text must be written by a lawyer before launch. These are the sections it needs to cover.
+          {t("Placeholder. The real text must be written by a lawyer before launch. These are the sections it needs to cover.")}
         </div>
         <ol style={{ margin: 0, paddingLeft: 22, display: "flex", flexDirection: "column", gap: 10 }}>
-          {doc.points.map((point) => <li key={point}>{point}</li>)}
+          {doc.points.map((point) => <li key={point}>{t(point)}</li>)}
         </ol>
       </div>
     </div>

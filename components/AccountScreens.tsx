@@ -6,6 +6,7 @@ import { useState, type FormEvent } from "react";
 import { useApp } from "@/lib/store";
 import { ADDRESS_LABELS, CITIES, RELATIONS } from "@/lib/data";
 import { SELF, cityById, formatAddress, newId, type Address, type Patient } from "@/lib/booking";
+import { t } from "@/lib/i18n";
 import { Icon } from "./Icon";
 import { BottomBar, Chip, EmptyState, Header, TextField } from "./ui";
 
@@ -15,14 +16,14 @@ const digits = (value: string, max: number) => value.replace(/\D/g, "").slice(0,
 function RemoveButton({ what, onRemove }: { what: string; onRemove: () => void }) {
   const [asking, setAsking] = useState(false);
   if (!asking) {
-    return <button type="button" className="btn btn-danger" onClick={() => setAsking(true)}>Remove {what}</button>;
+    return <button type="button" className="btn btn-danger" onClick={() => setAsking(true)}>{t("Remove {what}", { what })}</button>;
   }
   return (
     <div className="danger-box stack">
-      <div className="strong">Remove {what}?</div>
+      <div className="strong">{t("Remove {what}?", { what })}</div>
       <div className="actions">
-        <button type="button" className="btn btn-danger-solid" style={{ minHeight: 48, fontSize: 16 }} onClick={onRemove}>Yes, remove</button>
-        <button type="button" className="btn btn-outline" onClick={() => setAsking(false)}>Keep</button>
+        <button type="button" className="btn btn-danger-solid" style={{ minHeight: 48, fontSize: 16 }} onClick={onRemove}>{t("Yes, remove")}</button>
+        <button type="button" className="btn btn-outline" onClick={() => setAsking(false)}>{t("Keep")}</button>
       </div>
     </div>
   );
@@ -42,10 +43,10 @@ export function FamilyFormScreen() {
 
   const ageNumber = Number(age);
   const errors = {
-    name: name.trim().length < 2 ? "Enter the person's name." : undefined,
-    relation: !isSelf && !relation ? "Choose how they are related to you." : undefined,
+    name: name.trim().length < 2 ? t("Enter the person's name.") : undefined,
+    relation: !isSelf && !relation ? t("Choose how they are related to you.") : undefined,
     // Age is needed for family members (the nurse must know who to expect). It is optional for yourself.
-    age: (!isSelf && !age) || (age && (ageNumber < 0 || ageNumber > 120)) ? "Enter an age between 0 and 120." : undefined,
+    age: (!isSelf && !age) || (age && (ageNumber < 0 || ageNumber > 120)) ? t("Enter an age between 0 and 120.") : undefined,
   };
   const hasBooking = existing !== null && state.booking?.patient.id === existing.id;
 
@@ -78,16 +79,16 @@ export function FamilyFormScreen() {
 
   return (
     <form className="screen" onSubmit={save} noValidate>
-      <Header title={existing ? (isSelf ? "Your details" : "Edit family member") : "Add a family member"} onBack={() => back()} />
+      <Header title={existing ? (isSelf ? t("Your details") : t("Edit family member")) : t("Add a family member")} onBack={() => back()} />
       <div className="scroll gap-lg">
-        <TextField id="member-name" label="Full name" value={name} onChange={setName} error={tried ? errors.name : undefined} autoComplete="off" />
+        <TextField id="member-name" label={t("Full name")} value={name} onChange={setName} error={tried ? errors.name : undefined} autoComplete="off" />
 
         {!isSelf && (
           <div className="stack">
-            <label id="relation-label">How are they related to you?</label>
+            <label id="relation-label">{t("How are they related to you?")}</label>
             <div className="wrap" role="group" aria-labelledby="relation-label">
               {RELATIONS.map((r) => (
-                <Chip key={r} className="chip-toggle" selected={relation === r} onClick={() => setRelation(r)}>{r}</Chip>
+                <Chip key={r} className="chip-toggle" selected={relation === r} onClick={() => setRelation(r)}>{t(r)}</Chip>
               ))}
             </div>
             {tried && errors.relation && <div role="alert" className="error">{errors.relation}</div>}
@@ -96,30 +97,30 @@ export function FamilyFormScreen() {
 
         <TextField
           id="member-age"
-          label={isSelf ? "Age (optional)" : "Age"}
+          label={isSelf ? t("Age (optional)") : t("Age")}
           value={age}
           onChange={(v) => setAge(digits(v, 3))}
           error={tried ? errors.age : undefined}
           inputMode="numeric"
-          hint="Helps the nurse prepare, for example for a child or an older person."
+          hint={t("Helps the nurse prepare, for example for a child or an older person.")}
         />
 
         <div className="stack">
-          <label id="gender-label">Gender (optional)</label>
+          <label id="gender-label">{t("Gender (optional)")}</label>
           <div className="wrap" role="group" aria-labelledby="gender-label">
-            <Chip className="chip-toggle" selected={gender === "F"} onClick={() => setGender(gender === "F" ? "" : "F")}>Female</Chip>
-            <Chip className="chip-toggle" selected={gender === "M"} onClick={() => setGender(gender === "M" ? "" : "M")}>Male</Chip>
+            <Chip className="chip-toggle" selected={gender === "F"} onClick={() => setGender(gender === "F" ? "" : "F")}>{t("Female")}</Chip>
+            <Chip className="chip-toggle" selected={gender === "M"} onClick={() => setGender(gender === "M" ? "" : "M")}>{t("Male")}</Chip>
           </div>
         </div>
 
         {existing && !isSelf && (
           hasBooking
-            ? <p className="small muted">{existing.name} has an upcoming visit, so this profile cannot be removed until it is over or cancelled.</p>
+            ? <p className="small muted">{t("{name} has an upcoming visit, so this profile cannot be removed until it is over or cancelled.", { name: existing.name })}</p>
             : <RemoveButton what={existing.name} onRemove={remove} />
         )}
       </div>
       <BottomBar>
-        <button type="submit" className="btn btn-primary">{existing ? "Save changes" : "Add family member"}</button>
+        <button type="submit" className="btn btn-primary">{existing ? t("Save changes") : t("Add family member")}</button>
       </BottomBar>
     </form>
   );
@@ -132,14 +133,14 @@ export function AddressesScreen() {
 
   return (
     <div className="screen">
-      <Header title="Your addresses" onBack={() => back()} />
+      <Header title={t("Your addresses")} onBack={() => back()} />
       <div className="scroll">
-        <h1>Where should the nurse come?</h1>
+        <h1>{t("Where should the nurse come?")}</h1>
         {state.addresses.length === 0 && (
           <EmptyState
             icon="pin"
-            title="No address saved yet"
-            body="Add the address for home visits. You can save more than one, for example your parents' home."
+            title={t("No address saved yet")}
+            body={t("Add the address for home visits. You can save more than one, for example your parents' home.")}
           />
         )}
         {state.addresses.map((a) => (
@@ -154,23 +155,23 @@ export function AddressesScreen() {
             >
               <span className="radio-dot" />
               <span className="stack-xs" style={{ minWidth: 0 }}>
-                <span className="strong">{a.label}</span>
+                <span className="strong">{t(a.label)}</span>
                 <span className="small muted">{formatAddress(a)}</span>
               </span>
             </button>
-            <button type="button" className="icon-btn" style={{ height: "auto", border: "1px solid var(--line)", background: "var(--surface)" }} aria-label={`Edit ${a.label} address`} onClick={() => open("address", { editingId: a.id })}>
+            <button type="button" className="icon-btn" style={{ height: "auto", border: "1px solid var(--line)", background: "var(--surface)" }} aria-label={t("Edit {label} address", { label: t(a.label) })} onClick={() => open("address", { editingId: a.id })}>
               <Icon name="edit" size={20} />
             </button>
           </div>
         ))}
         <button type="button" className="btn btn-outline" onClick={() => open("address", { editingId: null })}>
           <Icon name="plus" size={20} />
-          Add a new address
+          {t("Add a new address")}
         </button>
       </div>
       {state.addresses.length > 0 && (
         <BottomBar>
-          <button type="button" className="btn btn-primary" onClick={() => back()}>Use this address</button>
+          <button type="button" className="btn btn-primary" onClick={() => back()}>{t("Use this address")}</button>
         </BottomBar>
       )}
     </div>
@@ -192,10 +193,10 @@ export function AddressFormScreen() {
   const [tried, setTried] = useState(false);
 
   const errors = {
-    label: !label ? "Choose a name for this address." : undefined,
-    line: line.trim().length < 3 ? "Enter the flat or house number, building and street." : undefined,
-    area: area.trim().length < 2 ? "Enter the area or locality." : undefined,
-    pincode: pincode.length !== 6 ? "Enter the 6-digit PIN code." : undefined,
+    label: !label ? t("Choose a name for this address.") : undefined,
+    line: line.trim().length < 3 ? t("Enter the flat or house number, building and street.") : undefined,
+    area: area.trim().length < 2 ? t("Enter the area or locality.") : undefined,
+    pincode: pincode.length !== 6 ? t("Enter the 6-digit PIN code.") : undefined,
   };
 
   const save = (e: FormEvent) => {
@@ -227,45 +228,45 @@ export function AddressFormScreen() {
 
   return (
     <form className="screen" onSubmit={save} noValidate>
-      <Header title={existing ? "Edit address" : "Add an address"} onBack={() => back()} />
+      <Header title={existing ? t("Edit address") : t("Add an address")} onBack={() => back()} />
       <div className="scroll gap-lg">
         {firstEver && (
           <div className="stack" style={{ gap: 6 }}>
-            <h1>Where should the nurse come?</h1>
-            <p className="muted">We show the nurses who are near this address.</p>
+            <h1>{t("Where should the nurse come?")}</h1>
+            <p className="muted">{t("We show the nurses who are near this address.")}</p>
           </div>
         )}
 
         <div className="stack">
-          <label id="city-label">City</label>
+          <label id="city-label">{t("City")}</label>
           <div className="wrap" role="group" aria-labelledby="city-label">
             {CITIES.map((c) => (
-              <Chip key={c.id} className="chip-toggle" selected={cityId === c.id} onClick={() => setCityId(c.id)}>{c.name}</Chip>
+              <Chip key={c.id} className="chip-toggle" selected={cityId === c.id} onClick={() => setCityId(c.id)}>{t(c.name)}</Chip>
             ))}
           </div>
         </div>
 
-        <TextField id="address-line" label="Flat or house number, building, street" value={line} onChange={setLine} error={tried ? errors.line : undefined} autoComplete="address-line1" />
-        <TextField id="address-area" label="Area or locality" value={area} onChange={setArea} error={tried ? errors.area : undefined} placeholder={`For example, ${cityById(cityId).area}`} autoComplete="address-level2" />
-        <TextField id="address-pin" label="PIN code" value={pincode} onChange={(v) => setPincode(digits(v, 6))} error={tried ? errors.pincode : undefined} inputMode="numeric" autoComplete="postal-code" />
-        <TextField id="address-landmark" label="Landmark (optional)" value={landmark} onChange={setLandmark} hint="Something that helps the nurse find the door." autoComplete="off" />
+        <TextField id="address-line" label={t("Flat or house number, building, street")} value={line} onChange={setLine} error={tried ? errors.line : undefined} autoComplete="address-line1" />
+        <TextField id="address-area" label={t("Area or locality")} value={area} onChange={setArea} error={tried ? errors.area : undefined} placeholder={t("For example, {area}", { area: cityById(cityId).area })} autoComplete="address-level2" />
+        <TextField id="address-pin" label={t("PIN code")} value={pincode} onChange={(v) => setPincode(digits(v, 6))} error={tried ? errors.pincode : undefined} inputMode="numeric" autoComplete="postal-code" />
+        <TextField id="address-landmark" label={t("Landmark (optional)")} value={landmark} onChange={setLandmark} hint={t("Something that helps the nurse find the door.")} autoComplete="off" />
 
         <div className="stack">
-          <label id="label-label">Save this address as</label>
+          <label id="label-label">{t("Save this address as")}</label>
           <div className="wrap" role="group" aria-labelledby="label-label">
             {ADDRESS_LABELS.map((l) => (
-              <Chip key={l} className="chip-toggle" selected={label === l} onClick={() => setLabel(l)}>{l}</Chip>
+              <Chip key={l} className="chip-toggle" selected={label === l} onClick={() => setLabel(l)}>{t(l)}</Chip>
             ))}
           </div>
           {tried && errors.label && <div role="alert" className="error">{errors.label}</div>}
         </div>
 
-        {existing && <RemoveButton what="this address" onRemove={remove} />}
+        {existing && <RemoveButton what={t("this address")} onRemove={remove} />}
       </div>
       <BottomBar>
-        <button type="submit" className="btn btn-primary">{existing ? "Save changes" : "Save address"}</button>
+        <button type="submit" className="btn btn-primary">{existing ? t("Save changes") : t("Save address")}</button>
         {firstEver && (
-          <button type="button" className="btn btn-plain" onClick={() => back()}>Skip for now</button>
+          <button type="button" className="btn btn-plain" onClick={() => back()}>{t("Skip for now")}</button>
         )}
       </BottomBar>
     </form>
@@ -282,9 +283,9 @@ export function ContactFormScreen() {
   const [tried, setTried] = useState(false);
 
   const errors = {
-    name: name.trim().length < 2 ? "Enter their name." : undefined,
-    relation: !relation ? "Choose how they are related to you." : undefined,
-    phone: phone.length !== 10 ? "Enter a 10-digit mobile number." : undefined,
+    name: name.trim().length < 2 ? t("Enter their name.") : undefined,
+    relation: !relation ? t("Choose how they are related to you.") : undefined,
+    phone: phone.length !== 10 ? t("Enter a 10-digit mobile number.") : undefined,
   };
 
   const save = (e: FormEvent) => {
@@ -296,26 +297,26 @@ export function ContactFormScreen() {
 
   return (
     <form className="screen" onSubmit={save} noValidate>
-      <Header title="Emergency contact" onBack={() => back()} />
+      <Header title={t("Emergency contact")} onBack={() => back()} />
       <div className="scroll gap-lg">
         <p className="muted">
-          This person is alerted if you press SOS during a visit. You can also choose to send them updates when a nurse arrives and leaves.
+          {t("This person is alerted if you press SOS during a visit. You can also choose to send them updates when a nurse arrives and leaves.")}
         </p>
-        <TextField id="contact-name" label="Full name" value={name} onChange={setName} error={tried ? errors.name : undefined} autoComplete="off" />
+        <TextField id="contact-name" label={t("Full name")} value={name} onChange={setName} error={tried ? errors.name : undefined} autoComplete="off" />
         <div className="stack">
-          <label id="contact-relation-label">How are they related to you?</label>
+          <label id="contact-relation-label">{t("How are they related to you?")}</label>
           <div className="wrap" role="group" aria-labelledby="contact-relation-label">
             {RELATIONS.map((r) => (
-              <Chip key={r} className="chip-toggle" selected={relation === r} onClick={() => setRelation(r)}>{r}</Chip>
+              <Chip key={r} className="chip-toggle" selected={relation === r} onClick={() => setRelation(r)}>{t(r)}</Chip>
             ))}
           </div>
           {tried && errors.relation && <div role="alert" className="error">{errors.relation}</div>}
         </div>
-        <TextField id="contact-phone" label="Mobile number" value={phone} onChange={(v) => setPhone(digits(v, 10))} error={tried ? errors.phone : undefined} inputMode="numeric" type="tel" autoComplete="off" />
-        {existing && <RemoveButton what="this contact" onRemove={() => back({ contact: null, notifyFamily: false })} />}
+        <TextField id="contact-phone" label={t("Mobile number")} value={phone} onChange={(v) => setPhone(digits(v, 10))} error={tried ? errors.phone : undefined} inputMode="numeric" type="tel" autoComplete="off" />
+        {existing && <RemoveButton what={t("this contact")} onRemove={() => back({ contact: null, notifyFamily: false })} />}
       </div>
       <BottomBar>
-        <button type="submit" className="btn btn-primary">{existing ? "Save changes" : "Save contact"}</button>
+        <button type="submit" className="btn btn-primary">{existing ? t("Save changes") : t("Save contact")}</button>
       </BottomBar>
     </form>
   );

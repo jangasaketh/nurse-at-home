@@ -46,6 +46,9 @@ Vercel and Netlify also work: import the repository and deploy with the default 
 
 ## What to test
 
+**Languages**
+- On the login screen, tap తెలుగు or ಕನ್ನಡ. Every screen switches, including services, the FAQ, dates, notifications and records. Switch back under Profile → Language.
+
 **First login**
 - After the OTP, a new user is asked for a name and must tick one consent box. The Terms and Privacy pages open from there.
 - Next comes the first address. "Skip for now" is allowed, but Home then asks for an address and a booking cannot continue without one.
@@ -82,6 +85,18 @@ Vercel and Netlify also work: import the repository and deploy with the default 
 - Turn off your Wi-Fi: a yellow "You are offline" strip appears at the top.
 - "Erase all data and start again" wipes what is saved on the device.
 
+## Languages: English, Telugu, Kannada (trial)
+
+Choose the language on the login screen or under Profile → Language. The choice is remembered.
+
+- Every piece of screen text is written in English inside `t("...")`. The English text is the key.
+- Translations live in `lib/i18n/strings-1.ts` to `strings-4.ts`, one line per text: `[English, Telugu, Kannada]`.
+- If a translation is missing, the English text is shown, so nothing breaks. In the browser console, `window.__i18nMissing` lists any that were missing.
+- Notifications and visit history are saved as messages (`msg(...)` in `lib/booking.ts`), so they also switch language later.
+- Names, addresses, phone numbers, units (mmHg, km), times like "9:00 AM", and the support placeholders stay as they are.
+- **The Telugu and Kannada text is a trial translation. A native speaker of each language, ideally someone with nursing or medical knowledge, must review it before launch.**
+- To add a language (Tamil, Malayalam, Marathi): add it to `LANGS` in `lib/i18n.ts`, add a column to the strings files, and add its Noto Sans font in `app/layout.tsx` and `app/globals.css`.
+
 ## Placeholders to replace before launch
 
 | What | Where |
@@ -89,6 +104,7 @@ Vercel and Netlify also work: import the repository and deploy with the default 
 | Prices, urgent charge, home visit charge | `lib/data.ts` |
 | Support phone, WhatsApp, email, hours | `SUPPORT` in `lib/data.ts` |
 | Cancellation and reschedule rule (provisional, see the reminder at the top) | Switch and numbers in `lib/data.ts`; logic in `changeFee()` in `lib/booking.ts`; matching FAQ answer |
+| Telugu and Kannada wording (trial, needs native-speaker review) | `lib/i18n/strings-*.ts` |
 | Terms of Use and Privacy Policy text | `LEGAL` in `lib/data.ts` (a lawyer must write these) |
 | Prototype tools block and Prototype buttons | `ProfileScreen` in `components/TabScreens.tsx`, and the dashed box in `TrackingScreen` in `components/VisitScreens.tsx` (delete them) |
 
@@ -110,6 +126,7 @@ Vercel and Netlify also work: import the repository and deploy with the default 
 | `components/AccountScreens.tsx` | Family members, addresses, emergency contact |
 | `components/SupportScreens.tsx` | Notifications, help and support, legal pages |
 | `components/TabScreens.tsx` | Bookings, Records, Profile and the bottom tab bar |
+| `lib/i18n.ts`, `lib/i18n/` | Language switch and the Telugu and Kannada translations |
 | `components/ui.tsx` | Shared parts: buttons, form fields, loading, error and empty states |
 
 ## Not built yet
@@ -122,4 +139,4 @@ Search for `TODO` in the code to find each spot.
 - Payments and refunds
 - Calls and chat
 - Real push or SMS notifications (the app only shows its own in-app list)
-- Local-language versions of the screens
+- Tamil, Malayalam and Marathi versions of the screens (Telugu and Kannada are done as a trial)

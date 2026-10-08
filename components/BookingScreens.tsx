@@ -3,15 +3,18 @@
 import { useState } from "react";
 import { useApp } from "@/lib/store";
 import { SAMPLE_REVIEWS, SLOTS, URGENT_FEE, URGENT_SLOT, VISIT_COUNTS, VITAL_CHECKS } from "@/lib/data";
-import { allowedText, dayAt, describeDraft, isVitals, money, policyLine, prescriptionMissing, proofText } from "@/lib/booking";
+import {
+  allowedText, dayAt, describeDraft, isVitals, money, msg, addressMsg, policyLine, prescriptionMissing, proofText, relationWord, slotText, whenMsg, yearsText,
+} from "@/lib/booking";
 import { useAction, useLoad } from "@/lib/fake-api";
+import { t } from "@/lib/i18n";
 import { Icon, Star } from "./Icon";
 import { ActionError, BottomBar, CheckRow, Chip, ErrorState, Header, RadioCard, Rows, Skeleton } from "./ui";
 
 /* 1. Service details, with the prescription gate */
 export function ServiceScreen() {
   const { state, set, go, open } = useApp();
-  const { service, patient, address, addressText, unitPrice } = describeDraft(state);
+  const { service, patient, address, addressText, unitPrice, who } = describeDraft(state);
   const [error, setError] = useState(false);
   const [openInfo, setOpenInfo] = useState<string | null>(null);
   const pickChecks = isVitals(service);
@@ -30,26 +33,26 @@ export function ServiceScreen() {
 
   return (
     <div className="screen">
-      <Header title="Service details" onBack={() => go("home")} />
+      <Header title={t("Service details")} onBack={() => go("home")} />
       <div className="scroll">
         <div className="stack" style={{ gap: 6 }}>
-          <h1>{service.name}</h1>
-          <p className="muted">{service.short}</p>
+          <h1>{t(service.name)}</h1>
+          <p className="muted">{t(service.short)}</p>
           <div className="row-inline strong" style={{ gap: 16, marginTop: 6 }}>
             <span>{money(unitPrice)}</span>
-            <span className="muted" style={{ fontWeight: 500 }}>About {service.mins}</span>
+            <span className="muted" style={{ fontWeight: 500 }}>{t("About {time}", { time: t(service.mins) })}</span>
           </div>
         </div>
 
         {pickChecks && (
           <div className="stack">
             <div className="stack-xs">
-              <h2>Choose your checks</h2>
-              <p className="small muted">Tick the checks you want. Tap a name to see what it is and how to prepare.</p>
+              <h2>{t("Choose your checks")}</h2>
+              <p className="small muted">{t("Tick the checks you want. Tap a name to see what it is and how to prepare.")}</p>
             </div>
             {VITAL_CHECKS.map((v) => {
               const on = state.vitalIds.includes(v.id);
-              const open = openInfo === v.id;
+              const isOpen = openInfo === v.id;
               return (
                 <div key={v.id} className={`check-item ${on ? "on" : ""}`}>
                   <div className="check-row">
@@ -58,95 +61,94 @@ export function ServiceScreen() {
                       type="checkbox"
                       checked={on}
                       onChange={() => toggleCheck(v.id)}
-                      aria-label={`Add ${v.name}`}
+                      aria-label={t("Add {name}", { name: t(v.name) })}
                     />
-                    <button type="button" className="check-name" aria-expanded={open} onClick={() => setOpenInfo(open ? null : v.id)}>
+                    <button type="button" className="check-name" aria-expanded={isOpen} onClick={() => setOpenInfo(isOpen ? null : v.id)}>
                       <span className="stack-xs">
-                        <span className="strong">{v.name}</span>
-                        <span className="small primary-text">{open ? "Hide details" : "What is this?"}</span>
+                        <span className="strong">{t(v.name)}</span>
+                        <span className="small primary-text">{isOpen ? t("Hide details") : t("What is this?")}</span>
                       </span>
                       <span className="strong">{money(v.price)}</span>
                     </button>
                   </div>
-                  {open && (
+                  {isOpen && (
                     <div className="check-info">
-                      <div className="kv"><span className="k">What it tells you</span><span>{v.what}</span></div>
-                      <div className="kv"><span className="k">How it is done</span><span>{v.how}</span></div>
-                      <div className="kv"><span className="k">How to prepare</span><span>{v.prepare}</span></div>
-                      <p className="tiny muted">The nurse explains your reading. Your doctor decides what it means for you.</p>
+                      <div className="kv"><span className="k">{t("What it tells you")}</span><span>{t(v.what)}</span></div>
+                      <div className="kv"><span className="k">{t("How it is done")}</span><span>{t(v.how)}</span></div>
+                      <div className="kv"><span className="k">{t("How to prepare")}</span><span>{t(v.prepare)}</span></div>
+                      <p className="tiny muted">{t("The nurse explains your reading. Your doctor decides what it means for you.")}</p>
                     </div>
                   )}
                 </div>
               );
             })}
-            {error && noChecks && <div role="alert" className="error">Choose at least one check to continue.</div>}
+            {error && noChecks && <div role="alert" className="error">{t("Choose at least one check to continue.")}</div>}
           </div>
         )}
 
         <div className="card stack">
-          <h2>What the visit includes</h2>
+          <h2>{t("What the visit includes")}</h2>
           {service.includes.map((line) => (
             <div key={line} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
               <span className="primary-text" style={{ paddingTop: 2 }}><Icon name="check" size={18} strokeWidth={2.5} /></span>
-              <span style={{ fontSize: 15 }}>{line}</span>
+              <span style={{ fontSize: 15 }}>{t(line)}</span>
             </div>
           ))}
         </div>
 
         <div className="card stack" style={{ gap: 12 }}>
-          <h2>Who brings what</h2>
-          <div className="kv"><span className="k">The {service.nurseOnly ? "nurse" : "caregiver"} brings</span><span>{service.nurseBrings}</span></div>
-          <div className="kv"><span className="k">You keep ready</span><span>{service.youKeepReady}</span></div>
+          <h2>{t("Who brings what")}</h2>
+          <div className="kv"><span className="k">{t("The {who} brings", { who })}</span><span>{t(service.nurseBrings)}</span></div>
+          <div className="kv"><span className="k">{t("You keep ready")}</span><span>{t(service.youKeepReady)}</span></div>
         </div>
 
         {address ? (
-          <Rows items={[{ k: "Patient", v: patient.full }, { k: "Address", v: addressText }]} />
+          <Rows items={[{ k: t("Patient"), v: patient.full }, { k: t("Address"), v: addressText }]} />
         ) : (
           <div className="warn-box stack" style={{ gap: 12 }}>
             <div className="stack-xs">
-              <h2>Where should the {service.nurseOnly ? "nurse" : "caregiver"} come?</h2>
-              <div className="sub">Add an address to continue with this booking.</div>
+              <h2>{t("Where should the {who} come?", { who })}</h2>
+              <div className="sub">{t("Add an address to continue with this booking.")}</div>
             </div>
             <button type="button" className="btn btn-warn" onClick={() => open("address", { editingId: null })}>
               <Icon name="plus" size={20} />
-              Add address
+              {t("Add address")}
             </button>
-            {error && <div role="alert" className="error">Add an address to continue.</div>}
+            {error && <div role="alert" className="error">{t("Add an address to continue.")}</div>}
           </div>
         )}
 
         {service.needsPrescription && (
           <div className="warn-box stack" style={{ gap: 12 }}>
             <div className="stack-xs">
-              <h2>Doctor&apos;s prescription needed</h2>
+              <h2>{t("Doctor's prescription needed")}</h2>
               <div className="sub">
-                This service cannot be booked without one. We do not arrange doctor consultations, so please get it
-                from your own doctor. The nurse checks it against the medicine before starting.
+                {t("This service cannot be booked without one. We do not arrange doctor consultations, so please get it from your own doctor. The nurse checks it against the medicine before starting.")}
               </div>
             </div>
             {state.hasPrescription ? (
               <div className="between" style={{ background: "var(--surface)", borderRadius: 12, padding: "6px 12px" }}>
                 <span className="row-inline strong" style={{ color: "var(--ok)" }}>
                   <Icon name="check" size={20} strokeWidth={2.5} />
-                  Prescription added
+                  {t("Prescription added")}
                 </span>
                 <button type="button" className="link-btn small" style={{ color: "var(--warn-ink)" }} onClick={() => set({ hasPrescription: false })}>
-                  Remove
+                  {t("Remove")}
                 </button>
               </div>
             ) : (
               // TODO: open the camera or file picker and upload to storage.
               <button type="button" className="btn btn-warn" onClick={() => { set({ hasPrescription: true }); setError(false); }}>
                 <Icon name="upload" size={20} />
-                Add photo of prescription
+                {t("Add photo of prescription")}
               </button>
             )}
-            {error && <div role="alert" className="error">Add the prescription to continue.</div>}
+            {error && <div role="alert" className="error">{t("Add the prescription to continue.")}</div>}
           </div>
         )}
       </div>
       <BottomBar>
-        <button type="button" className="btn btn-primary" onClick={next}>Choose date and time</button>
+        <button type="button" className="btn btn-primary" onClick={next}>{t("Choose date and time")}</button>
       </BottomBar>
     </div>
   );
@@ -169,17 +171,17 @@ export function ScheduleScreen() {
 
   return (
     <div className="screen">
-      <Header title={d.service.name} onBack={() => go("service")} />
+      <Header title={t(d.service.name)} onBack={() => go("service")} />
       <div className="scroll gap-lg">
-        <h1>When should the nurse come?</h1>
+        <h1>{t("When should the {who} come?", { who: d.who })}</h1>
 
         <div className="grid grid-2">
-          <Chip className="strong" selected={!state.repeat} onClick={() => set({ repeat: false })}>One visit</Chip>
-          <Chip className="strong" selected={state.repeat} onClick={() => set({ repeat: true, ...clearUrgent })}>Repeat visits</Chip>
+          <Chip className="strong" selected={!state.repeat} onClick={() => set({ repeat: false })}>{t("One visit")}</Chip>
+          <Chip className="strong" selected={state.repeat} onClick={() => set({ repeat: true, ...clearUrgent })}>{t("Repeat visits")}</Chip>
         </div>
 
         <div className="stack">
-          <h2>{state.repeat ? "First visit" : "Day"}</h2>
+          <h2>{state.repeat ? t("First visit") : t("Day")}</h2>
           <div className="grid grid-5">
             {[0, 1, 2, 3, 4].map((i) => {
               const day = dayAt(i);
@@ -194,13 +196,13 @@ export function ScheduleScreen() {
         </div>
 
         <div className="stack">
-          <h2>Arrival time</h2>
+          <h2>{t("Arrival time")}</h2>
           {canBeUrgent && (
             <RadioCard
               selected={state.slot === URGENT_SLOT}
               onClick={() => { set({ slot: URGENT_SLOT }); setError(false); }}
-              label={`As soon as possible · ${money(URGENT_FEE)} extra`}
-              sub={`The nearest free ${d.who} reaches you within 60 minutes.`}
+              label={t("As soon as possible · {fee} extra", { fee: money(URGENT_FEE) })}
+              sub={t("The nearest free {who} reaches you within 60 minutes.", { who: d.who })}
             />
           )}
           <div className="grid grid-3">
@@ -210,14 +212,14 @@ export function ScheduleScreen() {
               </Chip>
             ))}
           </div>
-          {error && <div role="alert" className="error">Pick an arrival time to continue.</div>}
-          <p className="small muted">The nurse arrives within 30 minutes of the time you pick.</p>
+          {error && <div role="alert" className="error">{t("Pick an arrival time to continue.")}</div>}
+          <p className="small muted">{t("The {who} arrives within 30 minutes of the time you pick.", { who: d.who })}</p>
         </div>
 
         {state.repeat && (
           <>
             <div className="stack">
-              <h2>How many visits?</h2>
+              <h2>{t("How many visits?")}</h2>
               <div className="grid grid-5">
                 {VISIT_COUNTS.map((n) => (
                   <Chip key={n} className="chip-num" selected={n === state.count} onClick={() => set({ count: n })}>{n}</Chip>
@@ -226,36 +228,36 @@ export function ScheduleScreen() {
             </div>
 
             <div className="stack">
-              <h2>How often?</h2>
+              <h2>{t("How often?")}</h2>
               <div className="grid grid-2">
-                <Chip selected={state.every === 1} onClick={() => set({ every: 1 })}>Every day</Chip>
-                <Chip selected={state.every === 2} onClick={() => set({ every: 2 })}>Every 2 days</Chip>
+                <Chip selected={state.every === 1} onClick={() => set({ every: 1 })}>{t("Every day")}</Chip>
+                <Chip selected={state.every === 2} onClick={() => set({ every: 2 })}>{t("Every 2 days")}</Chip>
               </div>
             </div>
 
             <div className="stack">
-              <h2>Who should come?</h2>
+              <h2>{t("Who should come?")}</h2>
               <RadioCard
                 selected={state.sameNurse}
                 onClick={() => set({ sameNurse: true })}
-                label={`Same ${d.who} every visit`}
-                sub="One person follows the healing from start to finish."
+                label={t("Same {who} every visit", { who: d.who })}
+                sub={t("One person follows the healing from start to finish.")}
               />
               <RadioCard
                 selected={!state.sameNurse}
                 onClick={() => set({ sameNurse: false })}
-                label={`Any available ${d.who}`}
-                sub="Easier to get your time. You see who is coming the evening before."
+                label={t("Any available {who}", { who: d.who })}
+                sub={t("Easier to get your time. You see who is coming the evening before.")}
               />
             </div>
 
             <div className="tint-box stack-sm">
               <div className="strong">
-                {d.visits} visits, {d.everyText}, {d.firstDay} to {d.lastDay}, {d.slot}
+                {t("{n} visits, {every}, {from} to {to}, {time}", { n: d.visits, every: d.everyText, from: d.firstDay, to: d.lastDay, time: slotText(d.slot) })}
               </div>
               {d.service.needsPrescription && (
                 <div className="small" style={{ color: "var(--ink-soft)" }}>
-                  The prescription must cover every visit. The nurse checks it each time.
+                  {t("The prescription must cover every visit. The nurse checks it each time.")}
                 </div>
               )}
             </div>
@@ -263,7 +265,7 @@ export function ScheduleScreen() {
         )}
       </div>
       <BottomBar>
-        <button type="button" className="btn btn-primary" onClick={next}>See who is available</button>
+        <button type="button" className="btn btn-primary" onClick={next}>{t("See who is available")}</button>
       </BottomBar>
     </div>
   );
@@ -277,11 +279,11 @@ export function CaregiverListScreen() {
 
   const title = d.isCourse
     ? state.sameNurse
-      ? `Choose one ${d.who} for all ${d.visits} visits`
-      : `Choose the ${d.who} for visit 1`
+      ? t("Choose one {who} for all {n} visits", { who: d.who, n: d.visits })
+      : t("Choose the {who} for visit 1", { who: d.who })
     : d.service.nurseOnly
-      ? "Nurses free at this time"
-      : "Caregivers free at this time";
+      ? t("Nurses free at this time")
+      : t("Caregivers free at this time");
 
   return (
     <div className="screen">
@@ -291,25 +293,25 @@ export function CaregiverListScreen() {
           <h1>{title}</h1>
           <p className="muted" style={{ fontSize: 15 }}>
             {d.service.nurseOnly
-              ? "Only registered nurses are shown, because this service needs a nursing licence."
-              : "Registered nurses and trained compounders can do this service."}
+              ? t("Only registered nurses are shown, because this service needs a nursing licence.")
+              : t("Registered nurses and trained compounders can do this service.")}
           </p>
           {d.isCourse && (
             <p style={{ fontSize: 15, fontWeight: 500 }}>
               {state.sameNurse
-                ? `Everyone shown is free at ${d.slot} on all ${d.visits} days.`
-                : `Later visits go to any verified ${d.who} who is free at ${d.slot}.`}
+                ? t("Everyone shown is free at {time} on all {n} days.", { time: slotText(d.slot), n: d.visits })
+                : t("Later visits go to any verified {who} who is free at {time}.", { who: d.who, time: slotText(d.slot) })}
             </p>
           )}
         </div>
 
         <div className="stack" style={{ gap: 8 }}>
-          <h2>Your preferences</h2>
+          <h2>{t("Your preferences")}</h2>
           <div className="wrap">
-            <Chip className="chip-toggle" selected={state.womenOnly} onClick={() => set({ womenOnly: !state.womenOnly })}>Women only</Chip>
+            <Chip className="chip-toggle" selected={state.womenOnly} onClick={() => set({ womenOnly: !state.womenOnly })}>{t("Women only")}</Chip>
             {d.languages.map((lang) => (
               <Chip key={lang} className="chip-toggle" selected={state.language === lang} onClick={() => set({ language: state.language === lang ? null : lang })}>
-                Speaks {lang}
+                {t("Speaks {language}", { language: t(lang) })}
               </Chip>
             ))}
           </div>
@@ -317,32 +319,31 @@ export function CaregiverListScreen() {
 
         {load.status === "loading" && <Skeleton rows={3} />}
         {load.status === "error" && (
-          <ErrorState title={`We could not find ${d.who}s near you`} body="Check your internet connection and try again." onRetry={load.retry} />
+          <ErrorState title={t("We could not find {whoPlural} near you", { whoPlural: d.whoPlural })} onRetry={load.retry} />
         )}
 
         {load.status === "ready" && d.noWomenFree && (
           <div className="warn-box stack" style={{ gap: 12 }}>
             <div className="stack-xs">
-              <h2>No woman {d.who} is free near you at this time</h2>
+              <h2>{t("No woman {who} is free near you at this time", { who: d.who })}</h2>
               <div className="sub">
-                {d.othersFree === 1 ? `1 male ${d.who} is` : `${d.othersFree} male ${d.who}s are`} free nearby. You can
-                see them, or pick another time for a woman {d.who}.
+                {t("{n} male {who} free nearby. You can see them, or pick another time for a woman {who}.", { n: d.othersFree, who: d.who })}
               </div>
             </div>
             <button type="button" className="btn btn-warn" onClick={() => set({ womenOnly: false })}>
-              Show male {d.who}s
+              {t("Show male {whoPlural}", { whoPlural: d.whoPlural })}
             </button>
             <button type="button" className="btn btn-warn" onClick={() => go("schedule")}>
-              Pick another time
+              {t("Pick another time")}
             </button>
           </div>
         )}
 
         {load.status === "ready" && d.caregivers.length === 0 && !d.noWomenFree && (
           <div className="dashed-box stack">
-            <div className="muted">No {d.who} matches these preferences at this time.</div>
-            <button type="button" className="link-btn" onClick={() => set({ womenOnly: false, language: null })}>Clear preferences</button>
-            <button type="button" className="link-btn" onClick={() => go("schedule")}>Pick another time</button>
+            <div className="muted">{t("No {who} matches these preferences at this time.", { who: d.who })}</div>
+            <button type="button" className="link-btn" onClick={() => set({ womenOnly: false, language: null })}>{t("Clear preferences")}</button>
+            <button type="button" className="link-btn" onClick={() => go("schedule")}>{t("Pick another time")}</button>
           </div>
         )}
 
@@ -352,17 +353,19 @@ export function CaregiverListScreen() {
               <span className="avatar" style={{ width: 52, height: 52, fontSize: 18 }}>{c.initials}</span>
               <span className="stack-xs" style={{ flex: 1, minWidth: 0, gap: 1 }}>
                 <span className="strong" style={{ fontSize: 17 }}>{c.name}</span>
-                <span className="small muted">{c.qualification}</span>
+                <span className="small muted">{t(c.qualification)}</span>
               </span>
               <Icon name="next" size={20} />
             </span>
             <span className="meta">
               <span className="row-inline strong" style={{ gap: 4 }}><Star filled />{c.rating}</span>
-              <span className="muted">{c.visitCount} visits</span>
-              <span className="muted">{c.distance} away</span>
-              <span className="muted">{c.experience} experience</span>
+              <span className="muted">{t("{n} visits", { n: c.visitCount })}</span>
+              <span className="muted">{t("{distance} away", { distance: c.distance })}</span>
+              <span className="muted">{t("{years} experience", { years: yearsText(c.experienceYears) })}</span>
             </span>
-            <span className="small muted">{c.gender === "F" ? "Woman" : "Man"} · Speaks {c.speaks.join(", ")}</span>
+            <span className="small muted">
+              {c.gender === "F" ? t("Woman") : t("Man")} · {t("Speaks {language}", { language: c.speaks.map((l) => t(l)).join(", ") })}
+            </span>
             <span className="row-inline small primary-text" style={{ gap: 6, fontWeight: 500 }}>
               <Icon name="shield" size={16} />
               {proofText(c)}
@@ -382,31 +385,31 @@ export function CaregiverProfileScreen() {
 
   const bookLabel = d.isCourse
     ? state.sameNurse
-      ? `Book ${c.first} for ${d.visits} visits`
-      : `Book ${c.first} for visit 1`
-    : `Book ${c.first}`;
+      ? t("Book {name} for {n} visits", { name: c.first, n: d.visits })
+      : t("Book {name} for visit 1", { name: c.first })
+    : t("Book {name}", { name: c.first });
 
   return (
     <div className="screen">
-      <Header title="Caregiver profile" onBack={() => go("caregivers")} />
+      <Header title={t("Caregiver profile")} onBack={() => go("caregivers")} />
       <div className="scroll">
         <div className="row-inline" style={{ gap: 14 }}>
           <span className="avatar display" style={{ width: 72, height: 72, fontSize: 26 }}>{c.initials}</span>
           <div className="stack-xs" style={{ minWidth: 0 }}>
             <h1 style={{ fontSize: 26 }}>{c.name}</h1>
-            <div className="muted">{c.qualification}</div>
+            <div className="muted">{t(c.qualification)}</div>
           </div>
         </div>
 
         <div className="grid grid-3">
-          <div className="stat"><span className="n">{c.rating}</span><span className="tiny muted">Rating</span></div>
-          <div className="stat"><span className="n">{c.visitCount}</span><span className="tiny muted">Home visits</span></div>
-          <div className="stat"><span className="n">{c.experience}</span><span className="tiny muted">Experience</span></div>
+          <div className="stat"><span className="n">{c.rating}</span><span className="tiny muted">{t("Rating")}</span></div>
+          <div className="stat"><span className="n">{c.visitCount}</span><span className="tiny muted">{t("Home visits")}</span></div>
+          <div className="stat"><span className="n">{yearsText(c.experienceYears)}</span><span className="tiny muted">{t("Experience")}</span></div>
         </div>
 
         <div className="tint-box stack">
-          <h2>Verified by us</h2>
-          {["Government ID checked", c.regLine, "Address and references checked"].map((line) => (
+          <h2>{t("Verified by us")}</h2>
+          {[t("Government ID checked"), c.regLine, t("Address and references checked")].map((line) => (
             <div key={line} className="row-inline" style={{ gap: 10 }}>
               <span className="primary-text" style={{ display: "flex" }}><Icon name="check" size={18} strokeWidth={2.5} /></span>
               <span style={{ fontSize: 15 }}>{line}</span>
@@ -416,18 +419,18 @@ export function CaregiverProfileScreen() {
 
         <Rows
           items={[
-            { k: "Speaks", v: c.speaks.join(", ") },
-            { k: "Distance", v: `${c.distance} from you` },
-            { k: "Allowed to do", v: allowedText(c) },
+            { k: t("Speaks"), v: c.speaks.map((l) => t(l)).join(", ") },
+            { k: t("Distance"), v: t("{distance} from you", { distance: c.distance }) },
+            { k: t("Allowed to do"), v: allowedText(c) },
           ]}
         />
 
         <div className="stack">
-          <h2>What families say</h2>
+          <h2>{t("What families say")}</h2>
           {SAMPLE_REVIEWS.map((r) => (
             <div key={r.who} className="card stack-sm" style={{ padding: "14px 16px" }}>
-              <div style={{ fontSize: 15 }}>{r.text}</div>
-              <div className="tiny muted">{r.who}</div>
+              <div style={{ fontSize: 15 }}>{t(r.text)}</div>
+              <div className="tiny muted">{t(r.who)}</div>
             </div>
           ))}
         </div>
@@ -453,22 +456,23 @@ export function ReviewScreen() {
   const contact = state.contact;
   const payNow = d.total + state.arrears; // includes any unpaid charge from an earlier cash booking
   const times = d.isCourse ? ` × ${d.visits}` : "";
+  const serviceName = t(d.service.name);
 
   const caregiverLine = d.isCourse
     ? state.sameNurse
-      ? `${d.caregiver.name}, every visit`
-      : `${d.caregiver.name} first, then any available ${d.who}`
+      ? t("{name}, every visit", { name: d.caregiver.name })
+      : t("{name} first, then any available {who}", { name: d.caregiver.name, who: d.who })
     : d.caregiver.name;
 
   const summary = [
-    { k: "Service", v: d.service.name },
-    ...(d.checks.length ? [{ k: "Checks", v: d.checks.map((c) => c.name).join(", ") }] : []),
-    { k: "Patient", v: d.patient.full },
-    { k: d.isCourse ? "First visit" : "When", v: d.whenText },
-    ...(d.isCourse ? [{ k: "Course", v: `${d.visits} visits, ${d.everyText}, until ${d.lastDay}` }] : []),
-    { k: "Where", v: d.addressText },
-    { k: "Caregiver", v: caregiverLine },
-    { k: "Prescription", v: d.service.needsPrescription ? (state.hasPrescription ? "Added" : "Not added yet") : "Not needed" },
+    { k: t("Service"), v: serviceName },
+    ...(d.checks.length ? [{ k: t("Checks"), v: d.checks.map((c) => t(c.name)).join(", ") }] : []),
+    { k: t("Patient"), v: d.patient.full },
+    { k: d.isCourse ? t("First visit") : t("When"), v: d.whenText },
+    ...(d.isCourse ? [{ k: t("Course"), v: t("{n} visits, {every}, until {to}", { n: d.visits, every: d.everyText, to: d.lastDay }) }] : []),
+    { k: t("Where"), v: d.addressText },
+    { k: t("Caregiver"), v: caregiverLine },
+    { k: t("Prescription"), v: d.service.needsPrescription ? (state.hasPrescription ? t("Added") : t("Not added yet")) : t("Not needed") },
   ];
 
   // TODO: take payment (Razorpay) and create the booking through the API.
@@ -478,7 +482,7 @@ export function ReviewScreen() {
         booking: {
           serviceId: d.service.id,
           patient: { id: d.patient.id, name: d.patient.name, relation: d.patient.relation, age: d.patient.age, gender: d.patient.gender },
-          addressText: d.addressText,
+          addressText: d.address ? addressMsg(d.address) : "",
           cityId: d.city.id,
           bookedAt: Date.now(),
           startDate: d.startDate,
@@ -504,54 +508,58 @@ export function ReviewScreen() {
         screen: "tracking",
         trail: [],
       });
-      notify("Booking confirmed", `${d.service.name} for ${d.patient.name}, ${d.whenText}, with ${d.caregiver.name}.`);
+      notify(msg("Booking confirmed"), msg("{service} for {patient}, {when}, with {caregiver}.", { service: msg(d.service.name), patient: d.patient.name, when: whenMsg(d.startDate, d.slot), caregiver: d.caregiver.name }));
     });
 
   return (
     <div className="screen">
-      <Header title="Review and pay" onBack={() => go("caregiver")} />
+      <Header title={t("Review and pay")} onBack={() => go("caregiver")} />
       <div className="scroll">
-        <h1>Check the details</h1>
+        <h1>{t("Check the details")}</h1>
         <Rows items={summary} />
 
         <div className="card stack price-lines" style={{ gap: 8 }}>
-          <div className="line"><span className="muted">{d.service.name}{times}</span><span>{money(d.serviceTotal)}</span></div>
-          <div className="line"><span className="muted">Home visit charge{times}</span><span>{money(d.feeTotal)}</span></div>
+          <div className="line"><span className="muted">{serviceName}{times}</span><span>{money(d.serviceTotal)}</span></div>
+          <div className="line"><span className="muted">{t("Home visit charge")}{times}</span><span>{money(d.feeTotal)}</span></div>
           {d.urgent && (
-            <div className="line"><span className="muted">Urgent visit charge (within 60 minutes)</span><span>{money(d.urgentFee)}</span></div>
+            <div className="line"><span className="muted">{t("Urgent visit charge (within 60 minutes)")}</span><span>{money(d.urgentFee)}</span></div>
           )}
           {state.arrears > 0 && (
-            <div className="line"><span className="muted">Unpaid charge from an earlier booking</span><span>{money(state.arrears)}</span></div>
+            <div className="line"><span className="muted">{t("Unpaid charge from an earlier booking")}</span><span>{money(state.arrears)}</span></div>
           )}
-          <div className="line total"><span>Total</span><span>{money(payNow)}</span></div>
+          <div className="line total"><span>{t("Total")}</span><span>{money(payNow)}</span></div>
         </div>
 
         <div className="stack">
-          <h2>Pay with</h2>
+          <h2>{t("Pay with")}</h2>
           {PAY_OPTIONS.map((p) => (
-            <RadioCard key={p.id} selected={state.pay === p.id} onClick={() => set({ pay: p.id })} label={p.label} sub={p.sub} />
+            <RadioCard key={p.id} selected={state.pay === p.id} onClick={() => set({ pay: p.id })} label={t(p.label)} sub={t(p.sub)} />
           ))}
         </div>
 
         {contact ? (
           <CheckRow id="notify-family" checked={state.notifyFamily} onChange={(v) => set({ notifyFamily: v })}>
             <span className="stack-xs">
-              <span className="strong">Send visit updates to {contact.name} ({contact.relation.toLowerCase()})</span>
-              <span className="small muted">A message when the {d.who} arrives and when the visit ends.</span>
+              <span className="strong">{t("Send visit updates to {name} ({relation})", { name: contact.name, relation: relationWord(contact.relation) })}</span>
+              <span className="small muted">{t("A message when the {who} arrives and when the visit ends.", { who: d.who })}</span>
             </span>
           </CheckRow>
         ) : (
           <button type="button" className="link-btn" onClick={() => open("contact")}>
-            Add a family contact to send them visit updates
+            {t("Add a family contact to send them visit updates")}
           </button>
         )}
 
         <p className="small muted">{policyLine(d.urgent, d.who)}</p>
       </div>
       <BottomBar>
-        {action.failed && <ActionError>The booking did not go through, and you have not been charged. Check your internet connection and try again.</ActionError>}
+        {action.failed && <ActionError>{t("The booking did not go through, and you have not been charged. Check your internet connection and try again.")}</ActionError>}
         <button type="button" className="btn btn-primary" disabled={action.busy} onClick={confirm}>
-          {action.busy ? "Confirming…" : d.isCourse ? `Confirm ${d.visits} visits · ${money(payNow)}` : `Confirm booking · ${money(payNow)}`}
+          {action.busy
+            ? t("Confirming…")
+            : d.isCourse
+              ? t("Confirm {n} visits · {total}", { n: d.visits, total: money(payNow) })
+              : t("Confirm booking · {total}", { total: money(payNow) })}
         </button>
       </BottomBar>
     </div>

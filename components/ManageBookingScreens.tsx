@@ -8,20 +8,21 @@ import { useApp } from "@/lib/store";
 import { CANCEL_REASONS, FREE_UNTIL_HOURS, SLOTS, VISIT_FEE } from "@/lib/data";
 import {
   addDays, canReschedule, cancelTerms, changeFee, dayAt, dayInfo, describeBooking, feeReasonText, isFreeAt, money,
-  newId, todayISO, type VisitRecord,
+  joinMsg, msg, newId, patientWhoMsg, todayISO, tx, whenMsg, type Msg, type VisitRecord,
 } from "@/lib/booking";
 import { useAction } from "@/lib/fake-api";
+import { t } from "@/lib/i18n";
 import { ActionError, BottomBar, Chip, Header, RadioCard, Rows } from "./ui";
 
 function NotPossible({ title, body }: { title: string; body: string }) {
   const { back, open } = useApp();
   return (
     <div className="screen">
-      <Header title="Your visit" onBack={() => back()} />
+      <Header title={t("Your visit")} onBack={() => back()} />
       <div className="scroll">
         <h1>{title}</h1>
         <p className="muted">{body}</p>
-        <button type="button" className="btn btn-outline" onClick={() => open("help")}>Contact support</button>
+        <button type="button" className="btn btn-outline" onClick={() => open("help")}>{t("Contact support")}</button>
       </div>
     </div>
   );
@@ -32,12 +33,13 @@ function WaiveNote() {
   const { open } = useApp();
   return (
     <p className="small muted">
-      If the patient was hospitalised or got worse,{" "}
-      <button type="button" className="text-link" onClick={() => open("help")}>tell support</button>
-      {" "}and we will waive this charge.
+      {t("If the patient was hospitalised or got worse, tell support and we will waive this charge.")}{" "}
+      <button type="button" className="text-link" onClick={() => open("help")}>{t("Contact support")}</button>
     </p>
   );
 }
+
+const payPlace = (pay: string): Msg => (pay === "upi" ? msg("your UPI account") : msg("your card"));
 
 export function CancelScreen() {
   const { state, set, back, notify } = useApp();
@@ -48,38 +50,41 @@ export function CancelScreen() {
   const [now] = useState(() => Date.now()); // the charge is worked out for the moment the screen opened
 
   const booking = state.booking;
-  if (!booking) return <NotPossible title="No visit to cancel" body="You have no upcoming visit." />;
+  if (!booking) return <NotPossible title={t("No visit to cancel")} body={t("You have no upcoming visit.")} />;
   const b = describeBooking(booking);
   const terms = cancelTerms(booking, state.step, b.isCourse ? scope : "one", now, state.caregiverLate);
   if (!terms.allowed) {
-    return <NotPossible title="This visit cannot be cancelled now" body="Care has already started. If something is wrong, press SOS on the visit screen or contact support." />;
+    return <NotPossible title={t("This visit cannot be cancelled now")} body={t("Care has already started. If something is wrong, press SOS on the visit screen or contact support.")} />;
   }
 
+  const serviceName = t(b.service.name);
   const wholeCourse = b.isCourse && scope === "all" && b.remaining > 1;
-  const moneyLine = terms.paidOnline
-    ? `${money(terms.refund)} goes back to your ${booking.pay === "upi" ? "UPI account" : "card"}.`
+  const moneyMsg = terms.paidOnline
+    ? msg("{amount} goes back to {place}.", { amount: money(terms.refund), place: payPlace(booking.pay) })
     : terms.due > 0
-      ? `The ${money(terms.due)} home visit charge will be added to your next booking.`
-      : "You have not been charged anything.";
+      ? msg("The {fee} home visit charge will be added to your next booking.", { fee: money(terms.due) })
+      : msg("You have not been charged anything.");
+  const moneyLine = tx(moneyMsg);
 
   const confirm = () => {
     setTried(true);
     if (!reason) return;
     // TODO: cancel through the API, which also starts the refund and pays the caregiver any kept charge.
     action.run(() => {
+      const service = msg(b.service.name);
       const title = wholeCourse
-        ? `${b.service.name}, visits ${booking.visitNo} to ${booking.visits}`
+        ? msg("{service}, visits {from} to {to}", { service, from: booking.visitNo, to: booking.visits })
         : b.isCourse
-          ? `${b.service.name}, visit ${booking.visitNo} of ${booking.visits}`
-          : b.service.name;
+          ? msg("{service}, visit {n} of {total}", { service, n: booking.visitNo, total: booking.visits })
+          : service;
       const record: VisitRecord = {
         id: newId("v"),
         status: "cancelled",
         title,
-        when: b.when,
-        who: b.patient.chip === "Me" ? "You" : b.patient.chip,
+        when: whenMsg(b.visitDate, booking.slot),
+        who: patientWhoMsg(booking.patient),
         by: b.caregiver.name,
-        note: `Cancelled. Reason: ${reason}.`,
+        note: msg("Cancelled. Reason: {reason}.", { reason: msg(reason) }),
         readings: [],
       };
       // Cancelling one visit of a course moves on to the next one. Anything else closes the booking.
@@ -94,38 +99,38 @@ export function CancelScreen() {
         screen: "bookings",
         trail: [],
       });
-      notify(wholeCourse ? "Visits cancelled" : "Visit cancelled", `${title}. ${moneyLine}`);
+      notify(msg(wholeCourse ? "Visits cancelled" : "Visit cancelled"), joinMsg(". ", title, moneyMsg));
     });
   };
 
   return (
     <div className="screen">
-      <Header title="Cancel visit" onBack={() => back()} />
+      <Header title={t("Cancel visit")} onBack={() => back()} />
       <div className="scroll">
-        <h1>Cancel this visit?</h1>
+        <h1>{t("Cancel this visit?")}</h1>
         <Rows
           items={[
-            { k: "Service", v: b.service.name },
-            { k: "When", v: b.when },
-            { k: "Patient", v: b.patient.full },
-            { k: "Caregiver", v: b.caregiver.name },
+            { k: t("Service"), v: serviceName },
+            { k: t("When"), v: b.when },
+            { k: t("Patient"), v: b.patient.full },
+            { k: t("Caregiver"), v: b.caregiver.name },
           ]}
         />
 
         {b.isCourse && b.remaining > 1 && (
           <div className="stack">
-            <h2>What do you want to cancel?</h2>
-            <RadioCard selected={scope === "one"} onClick={() => setScope("one")} label={`Only ${b.visitLabel.toLowerCase()}`} sub="The rest of the course carries on." />
-            <RadioCard selected={scope === "all"} onClick={() => setScope("all")} label={`All ${b.remaining} remaining visits`} sub="The course ends here." />
+            <h2>{t("What do you want to cancel?")}</h2>
+            <RadioCard selected={scope === "one"} onClick={() => setScope("one")} label={t("Only visit {n} of {total}", { n: booking.visitNo, total: booking.visits })} sub={t("The rest of the course carries on.")} />
+            <RadioCard selected={scope === "all"} onClick={() => setScope("all")} label={t("All {n} remaining visits", { n: b.remaining })} sub={t("The course ends here.")} />
           </div>
         )}
 
         <div className="stack">
-          <h2>Why are you cancelling?</h2>
+          <h2>{t("Why are you cancelling?")}</h2>
           {CANCEL_REASONS.map((r) => (
-            <RadioCard key={r} selected={reason === r} onClick={() => setReason(r)} label={r} />
+            <RadioCard key={r} selected={reason === r} onClick={() => setReason(r)} label={t(r)} />
           ))}
-          {tried && !reason && <div role="alert" className="error">Choose a reason to continue.</div>}
+          {tried && !reason && <div role="alert" className="error">{t("Choose a reason to continue.")}</div>}
         </div>
 
         <div className={terms.kept > 0 ? "warn-box stack-sm" : "tint-box stack-sm"}>
@@ -135,11 +140,11 @@ export function CancelScreen() {
         {terms.kept > 0 && <WaiveNote />}
       </div>
       <BottomBar>
-        {action.failed && <ActionError>The visit was not cancelled. Check your internet connection and try again.</ActionError>}
+        {action.failed && <ActionError>{t("The visit was not cancelled. Check your internet connection and try again.")}</ActionError>}
         <button type="button" className="btn btn-danger-solid" disabled={action.busy} onClick={confirm}>
-          {action.busy ? "Cancelling…" : wholeCourse ? `Cancel ${b.remaining} visits` : "Cancel visit"}
+          {action.busy ? t("Cancelling…") : wholeCourse ? t("Cancel {n} visits", { n: b.remaining }) : t("Cancel visit")}
         </button>
-        <button type="button" className="btn btn-plain" onClick={() => back()}>Keep my booking</button>
+        <button type="button" className="btn btn-plain" onClick={() => back()}>{t("Keep my booking")}</button>
       </BottomBar>
     </div>
   );
@@ -155,9 +160,9 @@ export function RescheduleScreen() {
   const [tried, setTried] = useState(false);
   const [now] = useState(() => Date.now());
 
-  if (!booking) return <NotPossible title="No visit to move" body="You have no upcoming visit." />;
+  if (!booking) return <NotPossible title={t("No visit to move")} body={t("You have no upcoming visit.")} />;
   if (!canReschedule(booking, state.step)) {
-    return <NotPossible title="This visit cannot be moved now" body="The nurse has already set off, or this is an urgent visit. You can still cancel it, or contact support." />;
+    return <NotPossible title={t("This visit cannot be moved now")} body={t("The nurse has already set off, or this is an urgent visit. You can still cancel it, or contact support.")} />;
   }
   const b = describeBooking(booking);
   const isCurrent = (s: string) => dayIdx === current && s === booking.slot;
@@ -180,24 +185,25 @@ export function RescheduleScreen() {
         screen: "bookings",
         trail: [],
       });
-      const charge = fee === 0 ? "" : cash
-        ? ` The ${money(fee)} late-change charge will be added to your next booking.`
-        : ` A ${money(fee)} late-change charge was taken from your ${booking.pay === "upi" ? "UPI account" : "card"}.`;
-      notify("Visit moved", `${b.service.name} is now on ${dayInfo(newDate).full}, ${slot}, with ${b.caregiver.name}.${charge}`);
+      const moved = msg("{service} is now on {when}, with {name}.", { service: msg(b.service.name), when: whenMsg(newDate, slot), name: b.caregiver.name });
+      const charge = cash
+        ? msg("The {fee} late-change charge will be added to your next booking.", { fee: money(fee) })
+        : msg("A {fee} late-change charge was taken from {place}.", { fee: money(fee), place: payPlace(booking.pay) });
+      notify(msg("Visit moved"), fee === 0 ? moved : joinMsg(" ", moved, charge));
     });
   };
 
   return (
     <div className="screen">
-      <Header title="Reschedule" onBack={() => back()} />
+      <Header title={t("Reschedule")} onBack={() => back()} />
       <div className="scroll gap-lg">
         <div className="stack" style={{ gap: 6 }}>
-          <h1>Pick a new day and time</h1>
-          <p className="muted">Now: {b.when}, with {b.caregiver.name}.</p>
+          <h1>{t("Pick a new day and time")}</h1>
+          <p className="muted">{t("Now: {when}, with {name}.", { when: b.when, name: b.caregiver.name })}</p>
         </div>
 
         <div className="stack">
-          <h2>Day</h2>
+          <h2>{t("Day")}</h2>
           <div className="grid grid-5">
             {[0, 1, 2, 3, 4].map((i) => {
               const day = dayAt(i);
@@ -212,7 +218,7 @@ export function RescheduleScreen() {
         </div>
 
         <div className="stack">
-          <h2>Arrival time</h2>
+          <h2>{t("Arrival time")}</h2>
           <div className="grid grid-3">
             {SLOTS.map((s) => {
               const busy = !isFreeAt(b.caregiver, s);
@@ -227,31 +233,31 @@ export function RescheduleScreen() {
                   onClick={() => { if (!unavailable) setSlot(s); }}
                 >
                   {s}
-                  {busy ? <span className="sub">{b.caregiver.first} is busy</span> : isCurrent(s) ? <span className="sub">Current time</span> : null}
+                  {busy ? <span className="sub">{t("{name} is busy", { name: b.caregiver.first })}</span> : isCurrent(s) ? <span className="sub">{t("Current time")}</span> : null}
                 </button>
               );
             })}
           </div>
-          {tried && !slot && <div role="alert" className="error">Pick a new arrival time.</div>}
+          {tried && !slot && <div role="alert" className="error">{t("Pick a new arrival time.")}</div>}
         </div>
 
         <div className={fee > 0 ? "warn-box stack-sm" : "tint-box stack-sm"}>
           <div className="strong">
-            {fee > 0 ? `Moving this visit now costs ${money(VISIT_FEE)}.` : "Moving this visit is free."}
+            {fee > 0 ? t("Moving this visit now costs {fee}.", { fee: money(VISIT_FEE) }) : t("Moving this visit is free.")}
           </div>
           <div className="small">
             {fee > 0
-              ? `The visit is less than ${FREE_UNTIL_HOURS} hours away, so the ${b.who} is paid the home visit charge for the slot they held.`
+              ? t("The visit is less than {n} hours away, so the {who} is paid the home visit charge for the slot they held.", { n: FREE_UNTIL_HOURS, who: b.who })
               : feeReasonText(why, b.who)}
-            {b.isCourse && b.remaining > 1 ? ` The other ${b.remaining - 1} visits in this course move with it.` : ""}
+            {b.isCourse && b.remaining > 1 ? ` ${t("The other {n} visits in this course move with it.", { n: b.remaining - 1 })}` : ""}
           </div>
         </div>
         {fee > 0 && <WaiveNote />}
       </div>
       <BottomBar>
-        {action.failed && <ActionError>The visit was not moved. Check your internet connection and try again.</ActionError>}
+        {action.failed && <ActionError>{t("The visit was not moved. Check your internet connection and try again.")}</ActionError>}
         <button type="button" className="btn btn-primary" disabled={action.busy} onClick={save}>
-          {action.busy ? "Saving…" : fee > 0 ? `Save new time · ${money(fee)}` : "Save new time"}
+          {action.busy ? t("Saving…") : fee > 0 ? t("Save new time · {fee}", { fee: money(fee) }) : t("Save new time")}
         </button>
       </BottomBar>
     </div>

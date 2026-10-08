@@ -18,8 +18,8 @@
   --ok-bg: #e3f0e5;
   --danger: #b3261e;
   --danger-bg: #fce9e7;
-  --display: "Anek Latin", "Mukta", system-ui, sans-serif;
-  --body: "Mukta", "Noto Sans", system-ui, sans-serif;
+  --display: "Anek Latin", "Mukta", "Noto Sans Telugu", "Noto Sans Kannada", system-ui, sans-serif;
+  --body: "Mukta", "Noto Sans Telugu", "Noto Sans Kannada", "Noto Sans", system-ui, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -270,3 +270,11 @@ textarea.text-input { padding: 12px 14px; min-height: 110px; resize: vertical; l
 .pill-off { background: #eceeed; color: var(--muted); flex: none; }
 .actions > :only-child { grid-column: 1 / -1; }
 textarea { font: inherit; color: inherit; }
+
+/* Telugu and Kannada letters are taller and have marks above and below: give lines more room. */
+html[lang="te"] body, html[lang="kn"] body { line-height: 1.5; }
+html[lang="te"] h1, html[lang="kn"] h1 { font-size: 24px; line-height: 1.35; letter-spacing: 0; }
+html[lang="te"] h2, html[lang="kn"] h2 { line-height: 1.4; }
+html[lang="te"] .login h1, html[lang="kn"] .login h1 { font-size: 30px; }
+.lang-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.lang-row .chip { min-height: 40px; border-radius: 20px; padding: 0 14px; font-size: 15px; }

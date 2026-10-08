@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
+import { t } from "@/lib/i18n";
 import { Icon } from "./Icon";
 
-export function Header({ title, onBack, backLabel = "Back", right }: { title: string; onBack?: () => void; backLabel?: string; right?: ReactNode }) {
+export function Header({ title, onBack, backLabel, right }: { title: string; onBack?: () => void; backLabel?: string; right?: ReactNode }) {
   return (
     <div className="header">
       <div className="header-left">
         {onBack && (
-          <button type="button" className="icon-btn" onClick={onBack} aria-label={backLabel}>
+          <button type="button" className="icon-btn" onClick={onBack} aria-label={backLabel ?? t("Back")}>
             <Icon name="back" size={24} />
           </button>
         )}
@@ -104,7 +105,7 @@ export function CheckRow({ id, checked, onChange, children }: { id: string; chec
 /** Grey placeholder cards shown while a list is loading. */
 export function Skeleton({ rows = 3 }: { rows?: number }) {
   return (
-    <div className="stack" role="status" aria-label="Loading">
+    <div className="stack" role="status" aria-label={t("Loading")}>
       {Array.from({ length: rows }, (_, i) => (
         <div key={i} className="card skeleton-card">
           <div className="skeleton-line" style={{ width: "55%" }} />
@@ -117,13 +118,13 @@ export function Skeleton({ rows = 3 }: { rows?: number }) {
 }
 
 /** Shown when something could not be loaded. Always offers a way to try again. */
-export function ErrorState({ title = "We could not load this", body = "Check your internet connection and try again.", onRetry }: { title?: string; body?: string; onRetry: () => void }) {
+export function ErrorState({ title, body, onRetry }: { title?: string; body?: string; onRetry: () => void }) {
   return (
     <div role="alert" className="state-box">
       <span className="state-icon danger"><Icon name="alert" size={24} /></span>
-      <div className="strong">{title}</div>
-      <div className="small muted">{body}</div>
-      <button type="button" className="btn btn-outline" onClick={onRetry}>Try again</button>
+      <div className="strong">{title ?? t("We could not load this")}</div>
+      <div className="small muted">{body ?? t("Check your internet connection and try again.")}</div>
+      <button type="button" className="btn btn-outline" onClick={onRetry}>{t("Try again")}</button>
     </div>
   );
 }
@@ -141,6 +142,6 @@ export function EmptyState({ icon, title, body, action }: { icon: Parameters<typ
 }
 
 /** Inline message when a save or payment did not go through. */
-export function ActionError({ children = "That did not go through. Check your internet connection and try again." }: { children?: ReactNode }) {
-  return <div role="alert" className="error" style={{ marginBottom: 10 }}>{children}</div>;
+export function ActionError({ children }: { children?: ReactNode }) {
+  return <div role="alert" className="error" style={{ marginBottom: 10 }}>{children ?? t("That did not go through. Check your internet connection and try again.")}</div>;
 }

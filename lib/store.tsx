@@ -4,7 +4,8 @@
 // When the backend exists, replace the load/save here and the `set` calls with API calls.
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { newId, type Booking, type Contact, type Draft, type Notice, type PayMethod, type VisitRecord } from "./booking";
+import { setLang, type Lang } from "./i18n";
+import { newId, type Booking, type Contact, type Draft, type Msg, type Notice, type PayMethod, type VisitRecord } from "./booking";
 
 export type Screen =
   | "login" | "otp" | "setup" | "legal"
@@ -17,6 +18,7 @@ export type Screen =
 export const TAB_SCREENS: Screen[] = ["home", "bookings", "records", "profile"];
 
 export type AppState = Draft & {
+  lang: Lang; // English, Telugu or Kannada
   screen: Screen;
   trail: Screen[]; // screens to return to when Back is pressed on a pushed screen
   phone: string;
@@ -39,6 +41,7 @@ export type AppState = Draft & {
 };
 
 const initialState: AppState = {
+  lang: "en",
   screen: "login",
   trail: [],
   phone: "9876543210",
@@ -86,7 +89,7 @@ type AppContextValue = {
   /** Open a screen on top of the current one, so Back returns here. */
   open: (screen: Screen, patch?: Partial<AppState>) => void;
   back: (patch?: Partial<AppState>) => void;
-  notify: (title: string, body: string) => void;
+  notify: (title: Msg, body: Msg) => void;
   reset: () => void;
 };
 
@@ -95,6 +98,10 @@ const AppContext = createContext<AppContextValue | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(initialState);
   const [ready, setReady] = useState(false);
+
+  // Every t("...") call reads this. Set during render, so all screens draw in the chosen language.
+  setLang(state.lang);
+  useEffect(() => { document.documentElement.lang = state.lang; }, [state.lang]);
 
   // Read saved data once, after the page loads.
   useEffect(() => {
@@ -127,12 +134,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       screen: prev.trail[prev.trail.length - 1] ?? "home",
       trail: prev.trail.slice(0, -1),
     }));
-  const notify = (title: string, body: string) =>
+  const notify = (title: Msg, body: Msg) =>
     setState((prev) => ({
       ...prev,
       notifications: [{ id: newId("n"), title, body, at: Date.now(), read: false }, ...prev.notifications].slice(0, 50),
     }));
-  const reset = () => setState(initialState);
+  // Keep the chosen language when erasing everything else.
+  const reset = () => setState((prev) => ({ ...initialState, lang: prev.lang }));
 
   return <AppContext.Provider value={{ state, ready, set, go, open, back, notify, reset }}>{children}</AppContext.Provider>;
 }

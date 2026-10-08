@@ -17,6 +17,7 @@ import { BookingsScreen, ProfileScreen, RecordsScreen, TabBar } from "@/componen
 import { AddressFormScreen, AddressesScreen, ContactFormScreen, FamilyFormScreen } from "@/components/AccountScreens";
 import { HelpScreen, LegalScreen, NotificationsScreen } from "@/components/SupportScreens";
 import { Icon } from "@/components/Icon";
+import { t } from "@/lib/i18n";
 
 function CurrentScreen() {
   const { state } = useApp();
@@ -65,7 +66,7 @@ function OfflineBanner() {
   return (
     <div className="offline" role="status">
       <Icon name="offline" size={18} />
-      You are offline. Some things will not work until you reconnect.
+      {t("You are offline. Some things will not work until you reconnect.")}
     </div>
   );
 }

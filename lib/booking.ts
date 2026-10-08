@@ -4,6 +4,7 @@ import {
   CAREGIVERS, CITIES, FREE_UNTIL_HOURS, GRACE_MINUTES, ROUTINE_CHECK_IDS, SERVICES, SLOTS, TIMED_CANCEL_RULE,
   URGENT_FEE, URGENT_SLOT, VISIT_FEE, VITAL_CHECKS, VITALS_SERVICE_ID, type Caregiver, type City, type Service,
 } from "./data";
+import { getLang, t } from "./i18n";
 
 /* ---------- People, places, messages ---------- */
 
@@ -12,21 +13,54 @@ export const SELF = "Me"; // relation value for the account holder
 export type Patient = { id: string; name: string; relation: string; age: number | null; gender: "F" | "M" | "" };
 export type Address = { id: string; label: string; line: string; area: string; cityId: string; pincode: string; landmark: string };
 export type Contact = { name: string; relation: string; phone: string };
-export type Notice = { id: string; title: string; body: string; at: number; read: boolean };
+export type Notice = { id: string; title: Msg; body: Msg; at: number; read: boolean };
+
+/**
+ * Text that is saved (notifications, visit history) is saved as a message, not as finished text,
+ * so it shows in whatever language the app is in when it is read.
+ *   a plain string: shown as it is (names, numbers, and anything saved by an older version)
+ *   { k, v }:       an English key for t(), with values that may themselves be messages
+ *   { date, slot }: a visit date (yyyy-mm-dd) and arrival time, e.g. "Tomorrow, 9 Oct, 9:00 AM"
+ *   { j, s }:       several messages joined with a separator
+ */
+export type Msg =
+  | string
+  | { k: string; v?: Record<string, Msg | number> }
+  | { date: string; slot: string }
+  | { j: Msg[]; s: string };
+export const msg = (k: string, v?: Record<string, Msg | number>): Msg => (v ? { k, v } : { k });
+export const whenMsg = (date: string, slot: string): Msg => ({ date, slot });
+export const joinMsg = (s: string, ...parts: Msg[]): Msg => ({ j: parts, s });
+/** Turns a saved message into text in the current language. */
+export function tx(m: Msg): string {
+  if (typeof m === "string") return m;
+  if ("k" in m) {
+    const vars = m.v ? Object.fromEntries(Object.entries(m.v).map(([key, val]) => [key, typeof val === "number" ? val : tx(val)])) : undefined;
+    return t(m.k, vars);
+  }
+  if ("date" in m) return `${dayInfo(m.date).full}, ${slotText(m.slot)}`;
+  return m.j.map(tx).join(m.s);
+}
 export type PayMethod = "upi" | "card" | "cash";
 
-export const patientChip = (p: Patient) => (p.relation === SELF ? "Me" : `${p.name} · ${p.relation}`);
+export const patientChip = (p: Patient) => (p.relation === SELF ? t("Me") : `${p.name} · ${t(p.relation)}`);
 export const patientMeta = (p: Patient) =>
-  [p.relation === SELF ? "You" : p.relation, p.age ? String(p.age) : null].filter(Boolean).join(", ");
+  [p.relation === SELF ? t("You") : t(p.relation), p.age ? String(p.age) : null].filter(Boolean).join(", ");
+/** "mother" in an English sentence, the translated word otherwise. */
+export const relationWord = (relation: string) => (getLang() === "en" ? relation.toLowerCase() : t(relation));
 export const patientFull = (p: Patient) => {
-  const who = p.relation === SELF ? "you" : p.relation.toLowerCase();
+  const who = p.relation === SELF ? t("you") : relationWord(p.relation);
   return p.age ? `${p.name} (${who}), ${p.age}` : `${p.name} (${who})`;
 };
+/** "You", or "Lakshmi Rao · Mother", saved as a message. */
+export const patientWhoMsg = (p: Patient): Msg => (p.relation === SELF ? msg("You") : joinMsg(" · ", p.name, msg(p.relation)));
 const describePatient = (p: Patient) => ({ ...p, chip: patientChip(p), full: patientFull(p) });
 
 export const cityById = (id: string) => CITIES.find((c) => c.id === id) ?? CITIES[0];
-export const formatAddress = (a: Address) =>
-  [a.line, a.area, `${cityById(a.cityId).name}${a.pincode ? ` ${a.pincode}` : ""}`].filter(Boolean).join(", ");
+/** An address as a saved message, so the city name follows the app language. */
+export const addressMsg = (a: Address): Msg =>
+  joinMsg(", ", ...[a.line, a.area].filter(Boolean), a.pincode ? joinMsg(" ", msg(cityById(a.cityId).name), a.pincode) : msg(cityById(a.cityId).name));
+export const formatAddress = (a: Address) => tx(addressMsg(a));
 /** Language choices offered in a city: its own language, plus Hindi and English. */
 export const languagesIn = (city: City) => [city.language, "Hindi", "English"];
 
@@ -54,22 +88,25 @@ export const addDays = (iso: string, days: number) => {
 export function dayInfo(iso: string) {
   const d = fromISO(iso);
   const offset = Math.round((d.getTime() - fromISO(todayISO()).getTime()) / 86400000);
-  const short = `${d.getDate()} ${MONTHS[d.getMonth()]}`;
-  const word = offset === 0 ? "Today" : offset === 1 ? "Tomorrow" : DAYS[d.getDay()];
-  return { offset, weekday: offset === 0 ? "Today" : DAYS[d.getDay()], date: d.getDate(), short, full: `${word}, ${short}` };
+  const short = `${d.getDate()} ${t(MONTHS[d.getMonth()])}`;
+  const word = offset === 0 ? t("Today") : offset === 1 ? t("Tomorrow") : t(DAYS[d.getDay()]);
+  return { offset, weekday: offset === 0 ? t("Today") : t(DAYS[d.getDay()]), date: d.getDate(), short, full: `${word}, ${short}` };
 }
 export const dayAt = (offset: number) => dayInfo(addDays(todayISO(), offset));
 
 export function timeAgo(at: number) {
   const mins = Math.floor((Date.now() - at) / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins} min ago`;
-  if (mins < 60 * 24) return `${Math.floor(mins / 60)} hr ago`;
+  if (mins < 1) return t("Just now");
+  if (mins < 60) return t("{n} min ago", { n: mins });
+  if (mins < 60 * 24) return t("{n} hr ago", { n: Math.floor(mins / 60) });
   const d = new Date(at);
-  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  return `${d.getDate()} ${t(MONTHS[d.getMonth()])}`;
 }
 
 export const money = (n: number) => "₹" + n.toLocaleString("en-IN");
+
+/** Clock times stay as "9:00 AM". Only "within 60 minutes" is a phrase to translate. */
+export const slotText = (slot: string) => (slot === URGENT_SLOT ? t("within 60 minutes") : slot);
 
 /* ---------- Bookings ---------- */
 
@@ -77,7 +114,7 @@ export const money = (n: number) => "₹" + n.toLocaleString("en-IN");
 export type Booking = {
   serviceId: string;
   patient: Patient; // copied at booking time, so later edits do not change the booking
-  addressText: string;
+  addressText: Msg; // copied at booking time
   cityId: string;
   bookedAt: number; // when the booking was confirmed (milliseconds)
   startDate: string; // yyyy-mm-dd of the first visit
@@ -101,12 +138,12 @@ export type Booking = {
 export type VisitRecord = {
   id: string;
   status: "completed" | "cancelled" | "missed";
-  title: string;
-  when: string;
-  who: string;
+  title: Msg;
+  when: Msg;
+  who: Msg;
   by: string;
-  note: string;
-  readings: { name: string; value: string }[];
+  note: Msg;
+  readings: { name: Msg; value: string }[];
 };
 
 /** The choices a patient makes before confirming. */
@@ -139,8 +176,8 @@ export function caregiversFor(service: Service, city: City): ListedCaregiver[] {
     ...c,
     speaks: c.speaks.map((lang) => (lang === "LOCAL" ? city.language : lang)),
     regLine: c.isNurse
-      ? `${city.state} nursing council reg. no. ${c.regNo} (sample)`
-      : `Not a registered nurse. Wound-care certificate no. ${c.regNo} (sample)`,
+      ? t("{state} nursing council reg. no. {no} (sample)", { state: t(city.state), no: c.regNo })
+      : t("Not a registered nurse. Wound-care certificate no. {no} (sample)", { no: c.regNo }),
   }));
 }
 
@@ -164,12 +201,16 @@ export const readingsFor = (service: Service, vitalIds: string[]) =>
   checksByIds(isVitals(service) ? vitalIds : ROUTINE_CHECK_IDS);
 
 export const roleWord = (service: Service) => (service.nurseOnly ? "nurse" : "caregiver");
+/** "nurse" or "caregiver", in the chosen language, for use inside sentences. */
+export const whoWord = (service: Service) => t(roleWord(service));
+export const whoPlural = (service: Service) => t(service.nurseOnly ? "nurses" : "caregivers");
 export const proofText = (c: Caregiver) =>
-  c.isNurse ? "Nursing council registration verified" : "Training certificate verified";
+  c.isNurse ? t("Nursing council registration verified") : t("Training certificate verified");
 export const allowedText = (c: Caregiver) =>
-  c.isNurse ? "Injections, IV drips, medication, dressing, vitals" : "Dressing and vitals only";
+  c.isNurse ? t("Injections, IV drips, medication, dressing, vitals") : t("Dressing and vitals only");
+export const yearsText = (n: number) => t("{n} years", { n });
 
-const NOBODY: Patient = { id: "", name: "You", relation: SELF, age: null, gender: "" };
+const NOBODY: Patient = { id: "", name: "", relation: SELF, age: null, gender: "" };
 
 export function describeDraft(d: Draft) {
   const service = serviceById(d.serviceId);
@@ -208,9 +249,10 @@ export function describeDraft(d: Draft) {
     urgent,
     urgentFee,
     isCourse: visits > 1,
-    who: roleWord(service),
-    everyText: d.every === 1 ? "every day" : "every 2 days",
-    whenText: `${dayAt(d.dateIdx).full}, ${slot}`,
+    who: whoWord(service),
+    whoPlural: whoPlural(service),
+    everyText: d.every === 1 ? t("every day") : t("every 2 days"),
+    whenText: `${dayAt(d.dateIdx).full}, ${slotText(slot)}`,
     firstDay: dayAt(d.dateIdx).short,
     lastDay: dayAt(lastOffset).short,
     serviceTotal: unitPrice * visits,
@@ -237,15 +279,15 @@ export function describeBooking(b: Booking) {
     patient: describePatient(b.patient),
     caregiver,
     readings: readingsFor(service, b.vitalIds),
-    who: roleWord(service),
+    who: whoWord(service),
     visitDate,
-    when: `${dayInfo(visitDate).full}, ${b.slot}`,
-    nextWhen: `${dayInfo(addDays(visitDate, b.everyDays)).full}, ${b.slot}`,
+    when: `${dayInfo(visitDate).full}, ${slotText(b.slot)}`,
+    nextWhen: `${dayInfo(addDays(visitDate, b.everyDays)).full}, ${slotText(b.slot)}`,
     isCourse,
     hasNext: isCourse && b.visitNo < b.visits,
     remaining: b.visits - b.visitNo + 1,
-    visitLabel: `Visit ${b.visitNo} of ${b.visits}`,
-    planText: b.everyDays === 1 ? "every day" : "every 2 days",
+    visitLabel: t("Visit {n} of {total}", { n: b.visitNo, total: b.visits }),
+    planText: b.everyDays === 1 ? t("every day") : t("every 2 days"),
   };
 }
 
@@ -287,24 +329,27 @@ export function changeFee(b: Booking, step: number, now: number, caregiverLate: 
   return { fee: VISIT_FEE, why: "close" };
 }
 
-/** The reason, in words the patient sees. */
+/** The reason, in words the patient sees. `who` is already translated ("nurse" or "caregiver"). */
 export function feeReasonText(why: FeeReason, who: string) {
   switch (why) {
-    case "caregiver-late": return `Free, because the ${who} is running late.`;
-    case "grace": return `Free, because you booked less than ${GRACE_MINUTES} minutes ago.`;
-    case "early": return TIMED_CANCEL_RULE ? `Free, because the visit is more than ${FREE_UNTIL_HOURS} hours away.` : `Free, because the ${who} has not set off yet.`;
-    case "set-off": return `The home visit charge is kept because the ${who} has already set off. It is paid to the ${who}.`;
-    case "close": return `The home visit charge is kept because the visit is less than ${FREE_UNTIL_HOURS} hours away. It is paid to the ${who}.`;
+    case "caregiver-late": return t("Free, because the {who} is running late.", { who });
+    case "grace": return t("Free, because you booked less than {n} minutes ago.", { n: GRACE_MINUTES });
+    case "early": return TIMED_CANCEL_RULE
+      ? t("Free, because the visit is more than {n} hours away.", { n: FREE_UNTIL_HOURS })
+      : t("Free, because the {who} has not set off yet.", { who });
+    case "set-off": return t("The home visit charge is kept because the {who} has already set off. It is paid to the {who}.", { who });
+    case "close": return t("The home visit charge is kept because the visit is less than {n} hours away. It is paid to the {who}.", { n: FREE_UNTIL_HOURS, who });
   }
 }
 
 /** One line shown before payment, so the rule is never a surprise. */
 export function policyLine(urgent: boolean, who: string) {
-  if (!TIMED_CANCEL_RULE) return `Free to cancel until the ${who} sets off. After that the ${money(VISIT_FEE)} home visit charge is kept.`;
+  const fee = money(VISIT_FEE);
+  if (!TIMED_CANCEL_RULE) return t("Free to cancel until the {who} sets off. After that the {fee} home visit charge is kept.", { who, fee });
   const free = urgent
-    ? `Free to cancel within ${GRACE_MINUTES} minutes of booking.`
-    : `Free to cancel or move up to ${FREE_UNTIL_HOURS} hours before the visit.`;
-  return `${free} After that the ${money(VISIT_FEE)} home visit charge is kept and paid to the ${who}. We never keep more than that.`;
+    ? t("Free to cancel within {n} minutes of booking.", { n: GRACE_MINUTES })
+    : t("Free to cancel or move up to {n} hours before the visit.", { n: FREE_UNTIL_HOURS });
+  return `${free} ${t("After that the {fee} home visit charge is kept and paid to the {who}. We never keep more than that.", { fee, who })}`;
 }
 
 export function cancelTerms(b: Booking, step: number, scope: "one" | "all", now: number, caregiverLate: boolean) {

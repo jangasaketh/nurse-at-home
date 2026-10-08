@@ -1,4 +1,5 @@
 // SAMPLE DATA. Every caregiver name, price, rating and review here is a placeholder.
+// Text here is in English. It is translated on screen with t() (see lib/i18n.ts), so the English stays the key.
 // When the backend exists, these lists come from the API instead.
 
 import type { IconName } from "@/components/Icon";
@@ -136,7 +137,7 @@ export type Caregiver = {
   initials: string;
   qualification: string;
   isNurse: boolean;
-  experience: string;
+  experienceYears: number;
   distance: string;
   rating: string;
   visitCount: string;
@@ -147,10 +148,10 @@ export type Caregiver = {
 };
 
 export const CAREGIVERS: Caregiver[] = [
-  { id: "c1", name: "Anjali Thomas", first: "Anjali", initials: "AT", qualification: "Registered nurse · GNM", isNurse: true, experience: "8 years", distance: "1.2 km", rating: "4.9", visitCount: "212", speaks: ["LOCAL", "English", "Hindi"], gender: "F", regNo: "48213", busyAt: ["10:00 PM"] },
-  { id: "c2", name: "Mohammed Irfan", first: "Irfan", initials: "MI", qualification: "Registered nurse · B.Sc Nursing", isNurse: true, experience: "5 years", distance: "2.4 km", rating: "4.8", visitCount: "147", speaks: ["LOCAL", "Hindi", "Urdu", "English"], gender: "M", regNo: "51907", busyAt: ["12:00 PM"] },
-  { id: "c3", name: "Sunita Yadav", first: "Sunita", initials: "SY", qualification: "Registered nurse · GNM", isNurse: true, experience: "11 years", distance: "3.1 km", rating: "4.7", visitCount: "389", speaks: ["Hindi", "English"], gender: "F", regNo: "33684", busyAt: ["10:00 PM", "6:00 AM", "within 60 minutes"] },
-  { id: "c4", name: "Ravi Kumar", first: "Ravi", initials: "RK", qualification: "Compounder · wound-care trained", isNurse: false, experience: "14 years", distance: "0.9 km", rating: "4.6", visitCount: "501", speaks: ["LOCAL", "Hindi"], gender: "M", regNo: "7716", busyAt: ["6:00 AM"] },
+  { id: "c1", name: "Anjali Thomas", first: "Anjali", initials: "AT", qualification: "Registered nurse · GNM", isNurse: true, experienceYears: 8, distance: "1.2 km", rating: "4.9", visitCount: "212", speaks: ["LOCAL", "English", "Hindi"], gender: "F", regNo: "48213", busyAt: ["10:00 PM"] },
+  { id: "c2", name: "Mohammed Irfan", first: "Irfan", initials: "MI", qualification: "Registered nurse · B.Sc Nursing", isNurse: true, experienceYears: 5, distance: "2.4 km", rating: "4.8", visitCount: "147", speaks: ["LOCAL", "Hindi", "Urdu", "English"], gender: "M", regNo: "51907", busyAt: ["12:00 PM"] },
+  { id: "c3", name: "Sunita Yadav", first: "Sunita", initials: "SY", qualification: "Registered nurse · GNM", isNurse: true, experienceYears: 11, distance: "3.1 km", rating: "4.7", visitCount: "389", speaks: ["Hindi", "English"], gender: "F", regNo: "33684", busyAt: ["10:00 PM", "6:00 AM", "within 60 minutes"] },
+  { id: "c4", name: "Ravi Kumar", first: "Ravi", initials: "RK", qualification: "Compounder · wound-care trained", isNurse: false, experienceYears: 14, distance: "0.9 km", rating: "4.6", visitCount: "501", speaks: ["LOCAL", "Hindi"], gender: "M", regNo: "7716", busyAt: ["6:00 AM"] },
 ];
 
 // Launch cities. Nurses register with their STATE nursing council, so verification is per state.
