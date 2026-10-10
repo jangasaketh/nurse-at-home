@@ -6,6 +6,7 @@ import { SELF, canReschedule, describeBooking, formatAddress, patientMeta, tx } 
 import { useLoad } from "@/lib/fake-api";
 import { t } from "@/lib/i18n";
 import { LanguagePicker } from "./AuthScreens";
+import { InstallCard } from "./InstallCard";
 import { Icon, type IconName } from "./Icon";
 import { CheckRow, EmptyState, ErrorState, Skeleton } from "./ui";
 
@@ -197,6 +198,11 @@ export function ProfileScreen() {
         </div>
 
         <div className="stack">
+          <h2>{t("App on your phone")}</h2>
+          <InstallCard />
+        </div>
+
+        <div className="stack">
           <h2>{t("Family members")}</h2>
           <div className="list">
             {state.patients.map((p) => (
@@ -296,6 +302,7 @@ export function ProfileScreen() {
         </div>
 
         <button type="button" className="btn btn-danger" onClick={() => go("login")}>{t("Log out")}</button>
+        <div className="tiny muted" style={{ textAlign: "center" }}>{t("Version {v}", { v: process.env.NEXT_PUBLIC_APP_VERSION ?? "" })}</div>
       </div>
     </div>
   );

@@ -18,6 +18,7 @@ import { AddressFormScreen, AddressesScreen, ContactFormScreen, FamilyFormScreen
 import { HelpScreen, LegalScreen, NotificationsScreen } from "@/components/SupportScreens";
 import { Icon } from "@/components/Icon";
 import { t } from "@/lib/i18n";
+import { registerServiceWorker } from "@/lib/install";
 
 function CurrentScreen() {
   const { state } = useApp();
@@ -96,6 +97,8 @@ function Shell() {
 }
 
 export default function Page() {
+  // Lets the installed app open without internet (see public/sw.js).
+  useEffect(() => { registerServiceWorker(); }, []);
   return (
     <AppProvider>
       <Shell />

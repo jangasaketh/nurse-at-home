@@ -5,6 +5,7 @@ import { SERVICES } from "@/lib/data";
 import { SELF, cityById, describeBooking, money, patientChip } from "@/lib/booking";
 import { t } from "@/lib/i18n";
 import { Icon } from "./Icon";
+import { InstallCard } from "./InstallCard";
 import { Chip } from "./ui";
 
 export function UpcomingLabel({ visitNo, visits }: { visitNo: number; visits: number }) {
@@ -20,7 +21,7 @@ export function HomeScreen() {
   const selectedPatientId = state.patients.some((p) => p.id === state.patientId) ? state.patientId : state.patients[0]?.id;
 
   const openService = (id: string) =>
-    set({ serviceId: id, screen: "service", trail: [], hasPrescription: false, slot: null, repeat: false });
+    set({ serviceId: id, screen: "service", trail: [], prescription: null, slot: null, repeat: false });
 
   return (
     <div className="screen">
@@ -105,6 +106,8 @@ export function HomeScreen() {
             ))}
           </div>
         </div>
+
+        {!state.installDismissed && <InstallCard onDismiss={() => set({ installDismissed: true })} />}
 
         <div className="tint-box" style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
           <span className="primary-text" style={{ paddingTop: 2 }}><Icon name="shield" /></span>

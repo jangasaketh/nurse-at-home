@@ -114,4 +114,5 @@ export const STRINGS_3: [string, string, string][] = [
   ["Free to cancel or move up to {n} hours before the visit.", "విజిట్‌కు {n} గంటల ముందు వరకు రద్దు చేయడం లేదా మార్చడం ఉచితం.", "ಭೇಟಿಗೆ {n} ಗಂಟೆ ಮುಂಚಿನವರೆಗೆ ರದ್ದು ಅಥವಾ ಬದಲಾವಣೆ ಉಚಿತ."],
   ["After that the {fee} home visit charge is kept and paid to the {who}. We never keep more than that.", "ఆ తర్వాత {fee} ఇంటి విజిట్ ఛార్జీ ఉంచుకుని {who}‌కు చెల్లిస్తాము. అంతకంటే ఎక్కువ ఎప్పుడూ తీసుకోము.", "ನಂತರ {fee} ಮನೆ ಭೇಟಿ ಶುಲ್ಕ ಉಳಿಸಿಕೊಂಡು {who}‌ಗೆ ಪಾವತಿಸಲಾಗುತ್ತದೆ. ಅದಕ್ಕಿಂತ ಹೆಚ್ಚು ಎಂದಿಗೂ ತೆಗೆದುಕೊಳ್ಳುವುದಿಲ್ಲ."],
   ["You are offline. Some things will not work until you reconnect.", "మీరు ఆఫ్‌లైన్‌లో ఉన్నారు. మళ్ళీ కనెక్ట్ అయ్యే వరకు కొన్ని పనిచేయవు.", "ನೀವು ಆಫ್‌ಲೈನ್‌ನಲ್ಲಿದ್ದೀರಿ. ಮತ್ತೆ ಸಂಪರ್ಕಗೊಳ್ಳುವವರೆಗೆ ಕೆಲವು ಕೆಲಸ ಮಾಡುವುದಿಲ್ಲ."],
+  ["Version {v}", "వెర్షన్ {v}", "ಆವೃತ್ತಿ {v}"],
 ];

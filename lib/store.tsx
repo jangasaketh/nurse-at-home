@@ -5,6 +5,7 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { setLang, type Lang } from "./i18n";
+import type { Prescription } from "./prescription";
 import { newId, type Booking, type Contact, type Draft, type Msg, type Notice, type PayMethod, type VisitRecord } from "./booking";
 
 export type Screen =
@@ -28,7 +29,8 @@ export type AppState = Draft & {
   contact: Contact | null; // emergency / family contact
   editingId: string | null; // family member or address being edited (null = adding a new one)
   legalDoc: "terms" | "privacy";
-  hasPrescription: boolean;
+  prescription: Prescription | null; // for the booking being made
+  installDismissed: boolean; // "Not now" on the Install the app card on Home
   pay: PayMethod;
   booking: Booking | null;
   step: number; // 0 accepted, 1 on the way, 2 arrived, 3 care in progress
@@ -56,7 +58,8 @@ const initialState: AppState = {
   patientId: "me",
   addressId: null,
   serviceId: "inj",
-  hasPrescription: false,
+  prescription: null,
+  installDismissed: false,
   dateIdx: 0,
   slot: null,
   repeat: false,

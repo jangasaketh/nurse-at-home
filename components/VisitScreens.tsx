@@ -7,6 +7,7 @@ import { canReschedule, describeBooking, money, msg, newId, patientWhoMsg, whenM
 import { t } from "@/lib/i18n";
 import { Icon, Star } from "./Icon";
 import { BottomBar, Header } from "./ui";
+import { PrescriptionCard } from "./PrescriptionPicker";
 
 /* Live visit tracking */
 export function TrackingScreen() {
@@ -175,6 +176,14 @@ export function TrackingScreen() {
           </div>
           <div className="arrival-code">{ARRIVAL_CODE}</div>
         </div>
+
+        {booking.prescription && (
+          <div className="stack-sm">
+            <h2>{t("Prescription for this visit")}</h2>
+            <PrescriptionCard p={booking.prescription} />
+            <p className="small muted">{t("{name} checks it against the medicine before starting. Keep the paper prescription ready too.", { name: first })}</p>
+          </div>
+        )}
 
         <div className="card stack" style={{ gap: 14 }}>
           {steps.map((label, i) => (

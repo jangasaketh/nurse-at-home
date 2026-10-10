@@ -9,6 +9,7 @@ import {
 import { useAction, useLoad } from "@/lib/fake-api";
 import { t } from "@/lib/i18n";
 import { Icon, Star } from "./Icon";
+import { PrescriptionCard, PrescriptionPicker } from "./PrescriptionPicker";
 import { ActionError, BottomBar, CheckRow, Chip, ErrorState, Header, RadioCard, Rows, Skeleton } from "./ui";
 
 /* 1. Service details, with the prescription gate */
@@ -21,7 +22,7 @@ export function ServiceScreen() {
   const noChecks = pickChecks && state.vitalIds.length === 0;
 
   const next = () => {
-    if (prescriptionMissing(service, state.hasPrescription) || noChecks || !address) setError(true);
+    if (prescriptionMissing(service, state.prescription) || noChecks || !address) setError(true);
     else go("schedule");
   };
 
@@ -126,23 +127,7 @@ export function ServiceScreen() {
                 {t("This service cannot be booked without one. We do not arrange doctor consultations, so please get it from your own doctor. The nurse checks it against the medicine before starting.")}
               </div>
             </div>
-            {state.hasPrescription ? (
-              <div className="between" style={{ background: "var(--surface)", borderRadius: 12, padding: "6px 12px" }}>
-                <span className="row-inline strong" style={{ color: "var(--ok)" }}>
-                  <Icon name="check" size={20} strokeWidth={2.5} />
-                  {t("Prescription added")}
-                </span>
-                <button type="button" className="link-btn small" style={{ color: "var(--warn-ink)" }} onClick={() => set({ hasPrescription: false })}>
-                  {t("Remove")}
-                </button>
-              </div>
-            ) : (
-              // TODO: open the camera or file picker and upload to storage.
-              <button type="button" className="btn btn-warn" onClick={() => { set({ hasPrescription: true }); setError(false); }}>
-                <Icon name="upload" size={20} />
-                {t("Add photo of prescription")}
-              </button>
-            )}
+            <PrescriptionPicker value={state.prescription} onChange={(p) => { set({ prescription: p }); if (p) setError(false); }} />
             {error && <div role="alert" className="error">{t("Add the prescription to continue.")}</div>}
           </div>
         )}
@@ -472,7 +457,7 @@ export function ReviewScreen() {
     ...(d.isCourse ? [{ k: t("Course"), v: t("{n} visits, {every}, until {to}", { n: d.visits, every: d.everyText, to: d.lastDay }) }] : []),
     { k: t("Where"), v: d.addressText },
     { k: t("Caregiver"), v: caregiverLine },
-    { k: t("Prescription"), v: d.service.needsPrescription ? (state.hasPrescription ? t("Added") : t("Not added yet")) : t("Not needed") },
+    { k: t("Prescription"), v: d.service.needsPrescription ? (state.prescription ? t("Added") : t("Not added yet")) : t("Not needed") },
   ];
 
   // TODO: take payment (Razorpay) and create the booking through the API.
@@ -501,7 +486,9 @@ export function ReviewScreen() {
           pay: state.pay,
           notifyContact: state.notifyFamily && contact !== null,
           carried: state.arrears,
+          prescription: d.service.needsPrescription ? state.prescription : null,
         },
+        prescription: null,
         step: 0,
         arrears: 0,
         caregiverLate: false,
@@ -517,6 +504,7 @@ export function ReviewScreen() {
       <div className="scroll">
         <h1>{t("Check the details")}</h1>
         <Rows items={summary} />
+        {d.service.needsPrescription && state.prescription && <PrescriptionCard p={state.prescription} />}
 
         <div className="card stack price-lines" style={{ gap: 8 }}>
           <div className="line"><span className="muted">{serviceName}{times}</span><span>{money(d.serviceTotal)}</span></div>

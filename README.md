@@ -4,6 +4,8 @@ Web app for booking verified nurses and compounders for home visits: injections,
 
 This is the **frontend only**. There is no server yet. Caregivers, prices and ratings are sample data. What a person enters (name, family, addresses, bookings) is saved in their own browser, so it survives a refresh on that device but is not shared with any other device. "Nurse at Home" is a placeholder name.
 
+**Current version: 1.0.1.** Each update gets the next number (1.0.1, 1.0.2, …). What changed in each version is in `CHANGELOG.md`. The version is set in `package.json` and is shown at the bottom of Profile in the app.
+
 ## Reminder: the cancellation rule is provisional
 
 Applied on 6 Oct 2026 as a trial. **The owner has not made it final and may remove it.**
@@ -46,6 +48,11 @@ Vercel and Netlify also work: import the repository and deploy with the default 
 
 ## What to test
 
+**Install on a phone** (needs the GitHub Pages link, which is https)
+- Android, in Chrome: an "Install the app" card appears on Home. Tap Install, and the app gets its own icon. "Not now" hides the card; Profile → App on your phone still offers it.
+- iPhone, in Safari: Home shows "Show me how" with the Share → Add to Home Screen steps.
+- Open the installed app once with internet. After that it opens without internet too (with the offline strip at the top).
+
 **Languages**
 - On the login screen, tap తెలుగు or ಕನ್ನಡ. Every screen switches, including services, the FAQ, dates, notifications and records. Switch back under Profile → Language.
 
@@ -61,6 +68,7 @@ Vercel and Netlify also work: import the repository and deploy with the default 
 
 **Booking**
 - Injection, IV drip and medication cannot go past the service screen without a prescription.
+- Prescription: "Take a photo" opens the phone's back camera; "Choose a photo or PDF" opens the gallery or files. The photo is shrunk (to about 100 to 400 KB) and shown as a thumbnail. Tap it to see it full size. Try a text file or a tiny image to see the error messages. The photo appears again on Review and on the visit screen.
 - Those three services list registered nurses only. Dressing and vitals also list the compounder.
 - Vitals check: tick one or more checks; tap a name for details. The price is the total of the ticked checks.
 - "As soon as possible" adds an urgent charge. "Repeat visits" books a course with the same nurse or any available nurse.
@@ -104,6 +112,7 @@ Choose the language on the login screen or under Profile → Language. The choic
 | Prices, urgent charge, home visit charge | `lib/data.ts` |
 | Support phone, WhatsApp, email, hours | `SUPPORT` in `lib/data.ts` |
 | Cancellation and reschedule rule (provisional, see the reminder at the top) | Switch and numbers in `lib/data.ts`; logic in `changeFee()` in `lib/booking.ts`; matching FAQ answer |
+| App icon and home-screen name ("Nurse at Home") | `public/icons/`, `public/manifest.webmanifest`, `app/layout.tsx` |
 | Telugu and Kannada wording (trial, needs native-speaker review) | `lib/i18n/strings-*.ts` |
 | Terms of Use and Privacy Policy text | `LEGAL` in `lib/data.ts` (a lawyer must write these) |
 | Prototype tools block and Prototype buttons | `ProfileScreen` in `components/TabScreens.tsx`, and the dashed box in `TrackingScreen` in `components/VisitScreens.tsx` (delete them) |
@@ -127,6 +136,9 @@ Choose the language on the login screen or under Profile → Language. The choic
 | `components/SupportScreens.tsx` | Notifications, help and support, legal pages |
 | `components/TabScreens.tsx` | Bookings, Records, Profile and the bottom tab bar |
 | `lib/i18n.ts`, `lib/i18n/` | Language switch and the Telugu and Kannada translations |
+| `components/PrescriptionPicker.tsx`, `lib/prescription.ts` | Prescription camera and file picker, photo shrinking, preview |
+| `components/InstallCard.tsx`, `lib/install.ts` | "Install the app" card for Android and iPhone |
+| `public/manifest.webmanifest`, `public/icons/`, `public/sw.js` | App name and icons for the home screen; offline support (service worker) |
 | `components/ui.tsx` | Shared parts: buttons, form fields, loading, error and empty states |
 
 ## Not built yet
@@ -134,7 +146,7 @@ Choose the language on the login screen or under Profile → Language. The choic
 Search for `TODO` in the code to find each spot.
 
 - A server and database: real OTP by SMS, accounts that work across devices
-- Prescription photo upload
+- Uploading the prescription to a server (today it is kept only in the browser, and a PDF is not previewed)
 - Live map and caregiver location
 - Payments and refunds
 - Calls and chat

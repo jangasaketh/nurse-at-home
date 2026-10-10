@@ -5,6 +5,7 @@ import {
   URGENT_FEE, URGENT_SLOT, VISIT_FEE, VITAL_CHECKS, VITALS_SERVICE_ID, type Caregiver, type City, type Service,
 } from "./data";
 import { getLang, t } from "./i18n";
+import type { Prescription } from "./prescription";
 
 /* ---------- People, places, messages ---------- */
 
@@ -133,6 +134,7 @@ export type Booking = {
   pay: PayMethod;
   notifyContact: boolean; // send visit updates to the emergency contact
   carried: number; // unpaid charge from an earlier booking, to be collected with this one
+  prescription?: Prescription | null; // the nurse checks it at the door (missing on bookings saved before 1.0.1)
 };
 
 export type VisitRecord = {
@@ -182,8 +184,8 @@ export function caregiversFor(service: Service, city: City): ListedCaregiver[] {
 }
 
 /** RULE 2: these services cannot be booked without a prescription. */
-export function prescriptionMissing(service: Service, hasPrescription: boolean) {
-  return service.needsPrescription && !hasPrescription;
+export function prescriptionMissing(service: Service, prescription: Prescription | null) {
+  return service.needsPrescription && !prescription;
 }
 
 /** Patient preferences: a woman caregiver, and a language the caregiver speaks. */

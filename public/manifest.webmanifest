@@ -1,0 +1,19 @@
+{
+  "name": "Nurse at Home",
+  "short_name": "Nurse at Home",
+  "description": "Book verified nurses and compounders for injections, IV drips and dressing at home.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F1F5F2",
+  "theme_color": "#0E5C4A",
+  "lang": "en",
+  "categories": ["health", "medical"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
