@@ -5,7 +5,9 @@
 import { useState } from "react";
 import { useCg } from "@/lib/caregiver/store";
 import { checksOf, DECLINE_REASONS, earningFor, isUrgent, serviceOf, slotHour, visitPrice, type Job } from "@/lib/caregiver/data";
-import { courseText, courseWho, directionsUrl, patientLine, visibleRequests, whenText } from "@/lib/caregiver/rules";
+import { clock, courseText, courseWho, directionsUrl, offerWindowMs, patientLine, timeLeft, visibleRequests, whenText } from "@/lib/caregiver/rules";
+import { patientCancelPatch, useNow } from "@/lib/caregiver/engine";
+import { RegistrationBanner } from "./MoreScreens";
 import { money } from "@/lib/booking";
 import { useAction } from "@/lib/fake-api";
 import { t } from "@/lib/i18n";
@@ -25,7 +27,10 @@ export function JobsScreen() {
   const activeJob = state.active ? jobById(state.active.jobId) : null;
   const next = sortJobs(state.upcoming).find((j) => j.id !== state.active?.jobId) ?? null;
 
-  const toggle = () => update((prev) => ({ online: !prev.online, requestIds: prev.requestIds ?? jobs.map((j) => j.id) }));
+  const now = useNow();
+  const unread = state.notices.filter((n) => !n.read).length;
+  // Going offline hands unanswered requests back; they are offered again (with a fresh time limit) when back online.
+  const toggle = () => update((prev) => ({ online: !prev.online, offers: prev.online ? {} : prev.offers, requestIds: prev.requestIds ?? jobs.map((j) => j.id) }));
   const startVisit = (job: Job) =>
     open("visit", { active: { jobId: job.id, step: 0, late: 0, waitStartedAt: null, waitSkipped: false, checks: {} }, openJobId: job.id });
 
@@ -33,11 +38,19 @@ export function JobsScreen() {
     <div className="screen">
       <div className="scroll scroll-top" style={{ gap: 20 }}>
         <div className="between" style={{ alignItems: "flex-start" }}>
-          <div className="stack-xs">
-            <div className="muted" style={{ fontSize: 15 }}>{first ? t("Hello, {name}", { name: first }) : t("Hello")}</div>
+          <div className="stack-xs" style={{ minWidth: 0 }}>
+            <div className="row-inline" style={{ flexWrap: "wrap", gap: "4px 8px" }}>
+              <span className="muted" style={{ fontSize: 15 }}>{first ? t("Hello, {name}", { name: first }) : t("Hello")}</span>
+              <span className="pill pill-role"><Icon name="shield" size={14} />{state.role === "nurse" ? t("Registered nurse") : t("Compounder")}</span>
+            </div>
             <h1 style={{ fontSize: 26 }}>{state.online ? t("You are online") : t("You are offline")}</h1>
           </div>
-          <span className="pill pill-role"><Icon name="shield" size={14} />{state.role === "nurse" ? t("Registered nurse") : t("Compounder")}</span>
+          <div className="row-inline" style={{ gap: 10, flex: "none" }}>
+            <button type="button" className="bell" aria-label={unread ? t("Notifications, {n} new", { n: unread }) : t("Notifications")} onClick={() => open("notifications")}>
+              <Icon name="bell" size={22} />
+              {unread > 0 && <span className="badge">{unread}</span>}
+            </button>
+          </div>
         </div>
 
         <button type="button" role="switch" aria-checked={state.online} className={`online-card ${state.online ? "on" : ""}`} onClick={toggle}>
@@ -47,6 +60,8 @@ export function JobsScreen() {
           </span>
           <span className="switch" aria-hidden="true"><span /></span>
         </button>
+
+        <RegistrationBanner />
 
         {activeJob && state.active && (
           <button type="button" className="upcoming" onClick={() => open("visit", { openJobId: activeJob.id })}>
@@ -81,11 +96,11 @@ export function JobsScreen() {
                 action={
                   <div className="stack-sm" style={{ width: "100%" }}>
                     <button type="button" className="btn btn-outline" onClick={() => open("availability")}>{t("Work settings")}</button>
-                    <button type="button" className="link-btn small" style={{ alignSelf: "center" }} onClick={() => set({ requestIds: null, declined: [] })}>{t("Prototype: bring back the sample requests")}</button>
+                    <button type="button" className="link-btn small" style={{ alignSelf: "center" }} onClick={() => set({ requestIds: null, declined: [], expired: [], offers: {} })}>{t("Prototype: bring back the sample requests")}</button>
                   </div>
                 } />
             ) : (
-              requests.map((job) => <RequestCard key={job.id} job={job} onOpen={() => open("job", { openJobId: job.id })} />)
+              requests.map((job) => <RequestCard key={job.id} job={job} left={timeLeft(job, state, now)} onOpen={() => open("job", { openJobId: job.id })} />)
             )}
           </div>
         ) : (
@@ -105,7 +120,7 @@ export function JobsScreen() {
   );
 }
 
-function RequestCard({ job, onOpen }: { job: Job; onOpen: () => void }) {
+function RequestCard({ job, left, onOpen }: { job: Job; left: number | null; onOpen: () => void }) {
   const service = serviceOf(job);
   const course = courseText(job);
   return (
@@ -118,7 +133,10 @@ function RequestCard({ job, onOpen }: { job: Job; onOpen: () => void }) {
             <span className="small muted">{whenText(job)}</span>
           </span>
         </span>
-        {isUrgent(job) && <span className="pill pill-urgent">{t("Urgent")}</span>}
+        <span className="stack-xs" style={{ alignItems: "flex-end" }}>
+          {isUrgent(job) && <span className="pill pill-urgent">{t("Urgent")}</span>}
+          {left !== null && <span className={`timer-pill ${left < 60000 ? "hurry" : ""}`} role="timer">{t("{time} left", { time: clock(left) })}</span>}
+        </span>
       </span>
       <span className="meta muted">
         <span className="row-inline" style={{ gap: 4 }}><Icon name="pin" size={16} />{job.area} · {t("{km} km away", { km: job.distanceKm })}</span>
@@ -149,7 +167,22 @@ export function JobScreen() {
   const [clash, setClash] = useState<string | null>(null);
   const [callNote, setCallNote] = useState(false);
 
+  const now = useNow();
   const job = jobById(state.openJobId);
+  const accepted0 = !!job && state.upcoming.some((j) => j.id === job.id);
+  const left = job && !accepted0 ? timeLeft(job, state, now) : null;
+  const ranOut = !!job && !accepted0 && (state.expired.includes(job.id) || (left !== null && left <= 0));
+  if (job && ranOut) {
+    return (
+      <div className="screen">
+        <Header title={t("Visit request")} onBack={() => back()} />
+        <div className="scroll">
+          <EmptyState icon="clock" title={t("This request ran out of time")} body={t("It went to another caregiver. Answer within the time shown to get a request.")}
+            action={<button type="button" className="btn btn-outline" onClick={() => go("jobs")}>{t("Back to jobs")}</button>} />
+        </div>
+      </div>
+    );
+  }
   if (!job) {
     return (
       <div className="screen">
@@ -198,6 +231,13 @@ export function JobScreen() {
           </div>
           {course && <div className="small strong">{course}. {courseWho(job)}</div>}
         </div>
+
+        {left !== null && (
+          <div className={left < 60000 ? "danger-box between" : "warn-box between"} role="timer">
+            <span className="small strong">{t("Answer within")}</span>
+            <span className="wait-timer" style={{ fontSize: 26 }}>{clock(left)}</span>
+          </div>
+        )}
 
         {accepted && (
           <div className="tint-box stack-sm">
@@ -278,6 +318,10 @@ export function JobScreen() {
             )}
             {!isActive && <button type="button" className="btn btn-plain" onClick={() => open("cancel-visit", { openJobId: job.id })}>{t("I cannot do this visit")}</button>}
             {!isActive && <button type="button" className="btn btn-plain" onClick={() => go("jobs")}>{t("Back to jobs")}</button>}
+            {/* Prototype: stands in for the patient cancelling in their app. Remove before launch. */}
+            {!(isActive && (state.active?.step ?? 0) >= 3) && (
+              <button type="button" className="link-btn small" style={{ alignSelf: "center" }} onClick={() => update((prev) => patientCancelPatch(prev, job))}>{t("Prototype: the patient cancels")}</button>
+            )}
           </div>
         ) : declining ? (
           <div className="stack-sm">
@@ -290,6 +334,10 @@ export function JobScreen() {
               {action.busy ? t("Accepting…") : t("Accept · earn {amount}", { amount: money(pay.total) })}
             </button>
             <button type="button" className="btn btn-plain" onClick={() => setDeclining(true)}>{t("Decline")}</button>
+            <button type="button" className="link-btn small" style={{ alignSelf: "center" }}
+              onClick={() => update((prev) => ({ offers: { ...prev.offers, [job.id]: Date.now() - offerWindowMs(job) - 1000 } }))}>
+              {t("Prototype: let the time run out")}
+            </button>
           </div>
         )}
       </BottomBar>

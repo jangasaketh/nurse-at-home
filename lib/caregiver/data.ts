@@ -201,4 +201,24 @@ export const SAMPLE_RX: Record<string, { lines: string[]; doctor: string }> = {
   med: { doctor: "Dr. P. Menon, MBBS, MD", lines: ["Inj. Insulin (as per chart) before breakfast", "Tab. Metformin 500 mg after breakfast"] },
 };
 
+/* ---------- Answering requests (PLACEHOLDERS) ---------- */
+export const OFFER_MINUTES = 15; // time to answer a scheduled request
+export const OFFER_MINUTES_URGENT = 3; // time to answer an urgent ("within 60 minutes") request
+
+/* ---------- Registration renewal (PLACEHOLDER) ---------- */
+export const RENEWAL_WARN_DAYS = 60; // start reminding this many days before a nurse's registration expires
+
+/* ---------- Report a problem ---------- */
+export const REPORT_TOPICS = ["Problem at a visit", "Payment or payout", "A patient behaved badly", "Safety concern", "The app is not working", "Something else"];
+
+/* ---------- Patient cancels (sample reasons) ---------- */
+export const PATIENT_CANCEL_REASONS = ["The patient is feeling better", "The doctor changed the treatment", "I need a different day or time"];
+
+/** SAMPLE ratings that arrive after a finished visit (the patient rates in their app). */
+export const SAMPLE_NEW_REVIEWS = [
+  { stars: 5, text: "Kind and quick. Explained what she was doing.", tags: ["Gentle", "Explains well"] },
+  { stars: 5, text: "Arrived on time and left everything clean.", tags: ["On time", "Clean and careful"] },
+  { stars: 4, text: "Good work. Would like a call before arriving next time.", tags: ["Clean and careful"] },
+];
+
 export { SLOTS, URGENT_SLOT };

@@ -13,7 +13,8 @@ export type CgScreen =
   | "login" | "otp" | "role"
   | "kyc" | "kyc-personal" | "kyc-id" | "kyc-selfie" | "kyc-qualification" | "kyc-bank" | "review"
   | "jobs" | "job" | "visit" | "record" | "visit-done" | "cancel-visit"
-  | "schedule" | "availability" | "earnings" | "profile" | "help" | "legal";
+  | "schedule" | "availability" | "earnings" | "profile" | "help" | "legal"
+  | "notifications" | "ratings" | "report" | "payouts" | "patient-cancelled" | "renew";
 
 export const CG_TABS: CgScreen[] = ["jobs", "schedule", "earnings", "profile"];
 
@@ -27,6 +28,7 @@ export type Qualification = {
   certificate: PhotoFile | null;
   refName: string; // compounders: a doctor or clinic who can vouch for them
   refPhone: string;
+  validUntil?: string; // nurses: registration valid until, "YYYY-MM" (missing on data saved before 1.0.5)
 };
 export type Bank = { holder: string; account: string; ifsc: string; upi: string };
 
@@ -73,6 +75,27 @@ export type VisitRecord = {
   nextVisit: Msg | null;
 };
 
+/** An in-app notification. Titles and bodies are messages, so they follow the app language. */
+export type CgNotice = {
+  id: string;
+  kind: "request" | "cancelled" | "payout" | "document" | "rating" | "verified" | "expired" | "support";
+  title: Msg;
+  body: Msg;
+  at: number;
+  read: boolean;
+  key?: string; // stops the same reminder being added twice
+  to?: CgScreen; // where tapping it goes
+};
+
+export type Review = { id: string; stars: number; text: Msg; tags: string[]; service: Msg; patient: string; at: number; sample?: boolean };
+
+export type Ticket = { id: string; topic: string; visit: string | null; message: string; photo: PhotoFile | null; at: number; status: "open" | "resolved" };
+
+export type Payout = { id: string; at: number; amount: number; account: string; reference: string; sample?: boolean };
+
+/** What the caregiver sees after a patient cancels an accepted visit. */
+export type PatientCancel = { title: Msg; patient: string; when: Msg; reason: string; paid: number; late: boolean };
+
 export type CgState = {
   lang: Lang;
   screen: CgScreen;
@@ -99,6 +122,14 @@ export type CgState = {
   earnings: Earning[];
   installDismissed: boolean;
   legalDoc: "terms" | "conduct";
+  notices: CgNotice[];
+  reviews: Review[];
+  tickets: Ticket[];
+  payouts: Payout[];
+  offers: Record<string, number>; // request id -> when it was offered (for the time limit)
+  expired: string[]; // requests that ran out of time
+  lastCancel: PatientCancel | null;
+  renewal: { certificate: PhotoFile; validUntil: string; at: number } | null; // renewed registration waiting for checking
 };
 
 const now = () => Date.now();
@@ -146,6 +177,14 @@ const initialState: CgState = {
   earnings: [],
   installDismissed: false,
   legalDoc: "terms",
+  notices: [],
+  reviews: [],
+  tickets: [],
+  payouts: [],
+  offers: {},
+  expired: [],
+  lastCancel: null,
+  renewal: null,
 };
 
 const STORAGE_KEY = "nurse-at-home-caregiver:v1";
@@ -193,7 +232,9 @@ export function CaregiverProvider({ children }: { children: ReactNode }) {
   }, [state, ready]);
 
   const set = (patch: Partial<CgState>) => setState((prev) => ({ ...prev, ...patch }));
-  const update = (fn: (prev: CgState) => Partial<CgState>) => setState((prev) => ({ ...prev, ...fn(prev) }));
+  // An empty change keeps the same state, so nothing re-draws or re-saves (the engine checks every second).
+  const update = (fn: (prev: CgState) => Partial<CgState>) =>
+    setState((prev) => { const patch = fn(prev); return Object.keys(patch).length ? { ...prev, ...patch } : prev; });
   const go = (screen: CgScreen) => set({ screen, trail: [] });
   const open = (screen: CgScreen, patch: Partial<CgState> = {}) =>
     setState((prev) => ({ ...prev, ...patch, screen, trail: [...prev.trail, prev.screen] }));
@@ -215,6 +256,49 @@ export function useCg() {
   const ctx = useContext(CgContext);
   if (!ctx) throw new Error("useCg must be used inside CaregiverProvider");
   return ctx;
+}
+
+/* ---------- Sample history added when a caregiver is approved (prototype) ---------- */
+
+const mondayBefore = (weeksAgo: number) => {
+  const d = new Date();
+  d.setHours(10, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7) - 7 * weeksAgo);
+  return d.getTime();
+};
+
+// SAMPLE payouts for the last three Mondays.
+const samplePayouts = (account: string): Payout[] => [
+  { id: "p1", at: mondayBefore(0), amount: 3480, account, reference: "UTR 4129 8830 1172", sample: true },
+  { id: "p2", at: mondayBefore(1), amount: 2915, account, reference: "UTR 4129 5521 0496", sample: true },
+  { id: "p3", at: mondayBefore(2), amount: 3120, account, reference: "UTR 4128 9907 3315", sample: true },
+];
+
+// SAMPLE reviews from earlier patients.
+const sampleReviews = (): Review[] => [
+  { id: "r1", stars: 5, text: { k: "Very gentle with my father and explained every step." }, tags: ["Gentle", "Explains well"], service: { k: "Wound dressing" }, patient: "Suresh P.", at: now() - 1 * DAY, sample: true },
+  { id: "r2", stars: 5, text: { k: "Came on time and the injection did not hurt." }, tags: ["On time"], service: { k: "Injection at home" }, patient: "Anitha R.", at: now() - 4 * DAY, sample: true },
+  { id: "r3", stars: 4, text: { k: "Good care. Came 15 minutes late but called to tell us." }, tags: ["Kept us informed"], service: { k: "Vitals check" }, patient: "Meera K.", at: now() - 9 * DAY, sample: true },
+  { id: "r4", stars: 5, text: { k: "Clean and careful. We will book her again." }, tags: ["Clean and careful", "On time"], service: { k: "Elder care dressing" }, patient: "Ramesh N.", at: now() - 15 * DAY, sample: true },
+];
+
+/** Everything added when verification is approved: sample history, and the first notifications. */
+export function approvalPatch(s: CgState): Partial<CgState> {
+  const account = s.bank?.account.slice(-4) ?? "0000";
+  const payouts = s.payouts.length ? s.payouts : samplePayouts(account);
+  const notices: CgNotice[] = [
+    { id: "n-verified", kind: "verified", title: { k: "You are verified" }, body: { k: "Go online on the Jobs screen to start getting requests near you." }, at: now(), read: false, to: "jobs" },
+    { id: "n-payout", kind: "payout", title: { k: "Payout sent" }, body: { k: "{amount} was sent to your account •••• {acc}.", v: { amount: `₹${payouts[0].amount.toLocaleString("en-IN")}`, acc: account } }, at: payouts[0].at, read: false, to: "payouts" },
+    ...s.notices,
+  ];
+  return {
+    kycStatus: "approved",
+    rejected: null,
+    earnings: s.earnings.length ? s.earnings : sampleEarnings(),
+    payouts,
+    reviews: s.reviews.length ? s.reviews : sampleReviews(),
+    notices: s.notices.some((n) => n.id === "n-verified") ? s.notices : notices,
+  };
 }
 
 export { sampleEarnings };

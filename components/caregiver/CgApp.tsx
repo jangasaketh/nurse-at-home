@@ -15,6 +15,8 @@ import { JobScreen, JobsScreen } from "./JobScreens";
 import { CancelVisitScreen, RecordScreen, VisitDoneScreen, VisitScreen } from "./VisitScreens";
 import { AvailabilityScreen, EarningsScreen, ScheduleScreen } from "./WorkScreens";
 import { CgHelpScreen, CgLegalScreen, CgProfileScreen } from "./AccountScreens";
+import { CgNotificationsScreen, PatientCancelledScreen, PayoutsScreen, RatingsScreen, RenewScreen, ReportScreen } from "./MoreScreens";
+import { useCaregiverEngine } from "@/lib/caregiver/engine";
 
 function CurrentScreen() {
   const { state } = useCg();
@@ -41,6 +43,12 @@ function CurrentScreen() {
     case "profile": return <CgProfileScreen />;
     case "help": return <CgHelpScreen />;
     case "legal": return <CgLegalScreen />;
+    case "notifications": return <CgNotificationsScreen />;
+    case "ratings": return <RatingsScreen />;
+    case "report": return <ReportScreen />;
+    case "payouts": return <PayoutsScreen />;
+    case "patient-cancelled": return <PatientCancelledScreen />;
+    case "renew": return <RenewScreen />;
   }
 }
 
@@ -67,6 +75,7 @@ function CgTabBar() {
 
 function Shell() {
   const { state, ready } = useCg();
+  useCaregiverEngine(); // offers and time limits, renewal reminders
   if (!ready) {
     return (
       <main className="app cg">

@@ -9,6 +9,8 @@ import {
   SAMPLE_RX, serviceOf, SIDE_EFFECTS, visitPrice, WOUND_STATES, type Job,
 } from "@/lib/caregiver/data";
 import { directionsUrl, whenText } from "@/lib/caregiver/rules";
+import { patientCancelPatch } from "@/lib/caregiver/engine";
+import { SAMPLE_NEW_REVIEWS } from "@/lib/caregiver/data";
 import { ARRIVAL_CODE, LATE_MINUTES, NO_SHOW_MINUTES } from "@/lib/data";
 import { addDays, money, msg, newId, todayISO, tx, type Msg } from "@/lib/booking";
 import { useAction } from "@/lib/fake-api";
@@ -252,6 +254,13 @@ export function VisitScreen() {
           </div>
         )}
 
+        {/* Prototype: stands in for the patient cancelling in their app, before care starts. Remove before launch. */}
+        {step <= 2 && (
+          <div className="dashed-box">
+            <button type="button" className="link-btn small" onClick={() => update((prev) => patientCancelPatch(prev, job))}>{t("Prototype: the patient cancels")}</button>
+          </div>
+        )}
+
         {/* Step 4: care */}
         {step === 4 && (
           <div className="stack">
@@ -372,7 +381,14 @@ export function RecordScreen() {
           warnings: warnings.map((w) => msg(w)), earned: pay.total, cash, nextVisit: next ? nextVisitMsg(next) : null,
         };
         const earning: Earning = { id: newId("e"), at: Date.now(), kind: "visit", title: msg(service.name), patient: `${job.patient.first} ${job.patient.full.split(" ").slice(-1)[0].charAt(0)}.`, amount: pay.total, cash };
-        return { upcoming, active: null, lastRecord: record, records: [record, ...prev.records], earnings: [earning, ...prev.earnings], screen: "visit-done", trail: [] };
+        // SAMPLE: the patient rates the visit in their app; here a rating arrives straight away.
+        const sample = SAMPLE_NEW_REVIEWS[prev.records.length % SAMPLE_NEW_REVIEWS.length];
+        const review = { id: newId("r"), stars: sample.stars, text: msg(sample.text), tags: sample.tags, service: msg(service.name), patient: `${job.patient.first} ${job.patient.full.split(" ").slice(-1)[0].charAt(0)}.`, at: Date.now() };
+        const ratingNotice = { id: newId("n"), kind: "rating" as const, title: msg("{name} rated you {n} stars", { name: job.patient.first, n: sample.stars }), body: msg(sample.text), at: Date.now(), read: false, to: "ratings" as const };
+        return {
+          upcoming, active: null, lastRecord: record, records: [record, ...prev.records], earnings: [earning, ...prev.earnings],
+          reviews: [review, ...prev.reviews], notices: [ratingNotice, ...prev.notices], screen: "visit-done", trail: [],
+        };
       }),
     );
   };

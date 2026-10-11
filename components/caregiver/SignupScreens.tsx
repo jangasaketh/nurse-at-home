@@ -3,7 +3,8 @@
 // CAREGIVER APP: sign in, choose a role, and get verified (KYC).
 
 import { useState, type FormEvent } from "react";
-import { sampleEarnings, useCg, KYC_STEPS, type KycStep, type Qualification } from "@/lib/caregiver/store";
+import { approvalPatch, useCg, KYC_STEPS, type CgState, type KycStep, type Qualification } from "@/lib/caregiver/store";
+import { sampleValidUntil } from "@/lib/caregiver/engine";
 import { COMPOUNDER_TRAINING, ID_TYPES, NURSE_COURSES, servicesForRole, SPOKEN_LANGUAGES, type IdType } from "@/lib/caregiver/data";
 import { cityState, idNumberError, IFSC_RE, isAdult, STEP_TITLES, stepDone, UPI_RE } from "@/lib/caregiver/rules";
 import { CITIES } from "@/lib/data";
@@ -17,6 +18,15 @@ import { ActionError, BottomBar, CheckRow, Chip, Header, RadioCard, TextField } 
 
 const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const digits = (value: string, max: number) => value.replace(/\D/g, "").slice(0, max);
+
+/** Prototype: a grey "SAMPLE" picture standing in for a document photo. */
+const samplePhoto = (name: string): PhotoFile => ({
+  kind: "image",
+  name,
+  size: 1200,
+  dataUrl: `data:image/svg+xml;utf8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="500"><rect width="400" height="500" fill="#e9eef3"/><text x="200" y="260" font-family="sans-serif" font-size="42" font-weight="700" fill="#7a8794" text-anchor="middle">SAMPLE</text></svg>')}`,
+  addedAt: Date.now(),
+});
 
 /* ---------- Sign in ---------- */
 
@@ -129,7 +139,7 @@ export function RoleScreen() {
 /* ---------- Verification checklist ---------- */
 
 export function KycScreen() {
-  const { state, set, open, go } = useCg();
+  const { state, set, update, open, go } = useCg();
   const action = useAction(false);
   const [tried, setTried] = useState(false);
   const done = KYC_STEPS.filter((s) => stepDone(s, state)).length;
@@ -147,6 +157,26 @@ export function KycScreen() {
     action.run(() => set({ kycStatus: "submitted", rejected: null, screen: "review", trail: [] }));
   };
 
+  // Prototype only: fill whatever is missing with sample data and approve, so every caregiver screen can be tried.
+  const skipVerification = () => {
+    const city = state.personal?.cityId ?? "hyd";
+    const nurse = state.role !== "compounder";
+    const filled: Partial<CgState> = {
+      personal: state.personal ?? { name: "Kavya Reddy", gender: "F", dob: "1992-05-14", languages: ["Telugu", "English"], cityId: city, area: "Kondapur", pincode: "500084" },
+      idProof: state.idProof?.photo ? state.idProof : { type: "aadhaar", number: "1234", photo: samplePhoto("id.jpg") },
+      selfie: state.selfie ?? samplePhoto("selfie.jpg"),
+      qualification: state.qualification?.certificate ? state.qualification : {
+        course: nurse ? "GNM" : "First aid and wound care course", council: nurse ? cityState(city) : "", regNo: nurse ? "48213" : "",
+        years: "5", certificate: samplePhoto("certificate.jpg"), refName: "", refPhone: "",
+        // About six weeks away, so the renewal reminder can be seen.
+        validUntil: nurse ? sampleValidUntil() : undefined,
+      },
+      bank: state.bank ?? { holder: state.personal?.name ?? "Kavya Reddy", account: "123456789012", ifsc: "SBIN0001234", upi: "" },
+      agreed: true,
+    };
+    update((prev) => ({ ...filled, ...approvalPatch({ ...prev, ...filled }), screen: "review", trail: [] }));
+  };
+
   return (
     <div className="screen">
       <Header title={t("Get verified")} onBack={() => go(state.kycStatus === "rejected" ? "review" : "role")} />
@@ -160,6 +190,11 @@ export function KycScreen() {
           <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={KYC_STEPS.length} aria-valuenow={done}>
             <span style={{ width: `${(done / KYC_STEPS.length) * 100}%` }} />
           </div>
+        </div>
+        {/* Prototype only: there is no verification team yet. Remove before launch. */}
+        <div className="dashed-box stack-sm">
+          <button type="button" className="btn btn-demo" onClick={skipVerification}>{t("Prototype: skip verification")}</button>
+          <span className="small muted">{t("Fills sample details and documents for any step not done yet, and approves you straight away. Fill “Your details” first if you want your own name or city.")}</span>
         </div>
         {state.rejected && (
           <div className="danger-box stack-sm" role="alert">
@@ -370,6 +405,8 @@ export function QualificationScreen() {
   const [council, setCouncil] = useState(q?.council ?? defaultCouncil);
   const [regNo, setRegNo] = useState(q?.regNo ?? "");
   const [years, setYears] = useState(q?.years ?? "");
+  const [validUntil, setValidUntil] = useState(q?.validUntil ?? "");
+  const thisMonth = new Date().toISOString().slice(0, 7);
   const [certificate, setCertificate] = useState<PhotoFile | null>(q?.certificate ?? null);
   const [refName, setRefName] = useState(q?.refName ?? "");
   const [refPhone, setRefPhone] = useState(q?.refPhone ?? "");
@@ -378,6 +415,7 @@ export function QualificationScreen() {
   const errors = {
     course: !course ? (nurse ? t("Choose your nursing course.") : t("Choose your training.")) : "",
     regNo: nurse && !/^[A-Za-z0-9/-]{3,20}$/.test(regNo.trim()) ? t("Enter your registration number as on the certificate.") : "",
+    validUntil: !nurse ? "" : !/^\d{4}-\d{2}$/.test(validUntil) ? t("Enter the month and year, like 2031-03.") : validUntil < thisMonth ? t("This registration has expired. Renew it with your council first.") : "",
     years: years === "" || Number(years) > 50 ? t("Enter your years of experience.") : "",
     certificate: !certificate ? (nurse ? t("Add a photo of your registration certificate.") : t("Add a photo of your training certificate.")) : "",
     refPhone: refPhone && refPhone.length !== 10 ? t("Enter a 10-digit mobile number.") : "",
@@ -385,7 +423,7 @@ export function QualificationScreen() {
   const save = () => {
     setTried(true);
     if (Object.values(errors).some(Boolean)) return;
-    const value: Qualification = { course, council: nurse ? council : "", regNo: regNo.trim().toUpperCase(), years, certificate, refName: refName.trim(), refPhone };
+    const value: Qualification = { course, council: nurse ? council : "", regNo: regNo.trim().toUpperCase(), years, certificate, refName: refName.trim(), refPhone, validUntil: nurse ? validUntil : undefined };
     back({ qualification: value });
   };
 
@@ -417,6 +455,13 @@ export function QualificationScreen() {
           </div>
         )}
         <TextField id="cg-reg" label={nurse ? t("Registration number") : t("Certificate number (if any)")} value={regNo} onChange={setRegNo} error={tried ? errors.regNo : ""} />
+        {nurse && (
+          <div className="stack" style={{ gap: 6 }}>
+            <label htmlFor="cg-valid">{t("Registration valid until")}</label>
+            <input id="cg-valid" className={`text-input ${tried && errors.validUntil ? "invalid" : ""}`} type="month" min={thisMonth} value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
+            {tried && errors.validUntil ? <div role="alert" className="error">{errors.validUntil}</div> : <div className="small muted">{t("Printed on your registration certificate. We remind you before it expires.")}</div>}
+          </div>
+        )}
         <TextField id="cg-years" label={t("Years of experience")} inputMode="numeric" value={years} onChange={(v) => setYears(digits(v, 2))} error={tried ? errors.years : ""} />
         <div className="stack" style={{ gap: 6 }}>
           <span className="label">{nurse ? t("Registration certificate") : t("Training certificate")}</span>
@@ -482,7 +527,7 @@ export function BankScreen() {
 /* ---------- Waiting for verification ---------- */
 
 export function ReviewScreen() {
-  const { state, set, go, open } = useCg();
+  const { state, set, update, go, open } = useCg();
   const status = state.kycStatus;
   const services = servicesForRole(state.role ?? "nurse");
 
@@ -541,7 +586,7 @@ export function ReviewScreen() {
         </div>
         {/* There is no admin panel yet, so these buttons stand in for the verification team. Remove before launch. */}
         <div className="dashed-box stack">
-          <button type="button" className="btn btn-demo" onClick={() => set({ kycStatus: "approved", rejected: null, earnings: state.earnings.length ? state.earnings : sampleEarnings() })}>{t("Prototype: approve me")}</button>
+          <button type="button" className="btn btn-demo" onClick={() => update((prev) => approvalPatch(prev))}>{t("Prototype: approve me")}</button>
           <button type="button" className="link-btn" onClick={() => set({ kycStatus: "rejected", rejected: { step: "id", reason: "The ID photo is blurred. Take it again in good light." } })}>
             {t("Prototype: ask for a new ID photo")}
           </button>

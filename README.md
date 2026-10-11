@@ -11,7 +11,7 @@ Each app has its own colour (green for patients, blue for caregivers), its own h
 
 This is the **frontend only**. There is no server yet. Caregivers, patients, requests, prices, ratings and earnings are sample data. The two apps do not talk to each other yet: a booking made in the patient app does not appear in the caregiver app until there is a server. What a person enters (name, family, addresses, bookings) is saved in their own browser, so it survives a refresh on that device but is not shared with any other device. "Nurse at Home" is a placeholder name.
 
-**Current version: 1.0.3.** Each update gets the next number (1.0.1, 1.0.2, …). What changed in each version is in `CHANGELOG.md`. The version is set in `package.json` and is shown at the bottom of Profile in the app.
+**Current version: 1.0.5.** Each update gets the next number (1.0.1, 1.0.2, …). What changed in each version is in `CHANGELOG.md`. The version is set in `package.json` and is shown at the bottom of Profile in the app.
 
 ## Reminder: the cancellation rule is provisional
 
@@ -61,6 +61,7 @@ Open `/caregiver/`. Any 6 digits work as the OTP.
 - Choose "Registered nurse" or "Compounder or trained helper". Compounders are told that injections, drips and medication are for nurses only.
 - Five steps: your details (18+ only), government ID (Aadhaar asks only for the last 4 digits; photo only), selfie (front camera), qualification (nurses: course, state nursing council, registration number, certificate; compounders: training and an optional reference), bank account (account number twice, IFSC checked).
 - Tick the agreement and send. On the waiting screen, the prototype buttons stand in for the verification team: "approve me", or "ask for a new ID photo" to see the fix-and-resend flow.
+- In a hurry? "Prototype: skip verification" on the checklist fills sample documents and approves you at once.
 
 **Jobs**
 - Go online with the switch. Up to three sample requests appear, each with time, area and distance, the patient's first name, and what you will earn. Urgent and repeat-visit requests are marked.
@@ -73,6 +74,15 @@ Open `/caregiver/`. Any 6 digits work as the OTP.
 - The record asks for what fits the service: injection site and reaction, amount of fluid, wound state and next dressing (with an optional wound photo), doses and side effects, or the vitals readings. Readings outside the usual range show a plain-language warning to pass to the family.
 - Cash visits ask you to confirm you collected the payment.
 - "Nobody is answering?" starts a 10-minute wait, then lets you mark the visit as missed (Rs 49 paid to you). "Something does not match" stops the visit safely. "I cannot do this visit" cancels with a reason. SOS is on every visit screen.
+
+**Notifications, ratings, reports, payouts, renewal (1.0.5)**
+- The bell on Jobs shows unread notifications. Going online adds one per new request.
+- Each request shows a countdown ("15:00 left", urgent "3:00 left"). "Prototype: let the time run out" shows what happens when it expires.
+- On an accepted visit, "Prototype: the patient cancels" shows the cancellation screen: Rs 49 if late or after setting off, nothing if early.
+- After a finished visit, a rating arrives: Profile → Ratings and reviews.
+- Help or Profile → Report a problem: send a report and see it under "Your reports".
+- Earnings → Payout history and statements: past payouts, the monthly statement, and "Download statement (CSV)".
+- With "skip verification", the sample nurse's registration runs out in about six weeks, so the renewal banner shows. "Renew now" → add a certificate and a new month → "Prototype: approve the renewal".
 
 **Schedule, earnings, profile**
 - Schedule lists accepted visits by day; repeat visits move to the next day after each visit. Work settings set days, hours, distance, services and urgent requests, and the requests change to match.
@@ -147,6 +157,9 @@ Choose the language on the login screen or under Profile → Language. The choic
 | Cancellation and reschedule rule (provisional, see the reminder at the top) | Switch and numbers in `lib/data.ts`; logic in `changeFee()` in `lib/booking.ts`; matching FAQ answer |
 | App icon and home-screen name ("Nurse at Home") | `public/icons/`, `public/manifest.webmanifest`, `app/layout.tsx` |
 | Caregiver pay split: 80% of the service price, all of the Rs 49 visit charge, half of the urgent charge | `CAREGIVER_SHARE`, `VISIT_FEE_SHARE`, `URGENT_SHARE` in `lib/caregiver/data.ts` |
+| Time to answer a request (3 minutes urgent, 15 minutes scheduled) | `OFFER_MINUTES_URGENT`, `OFFER_MINUTES` in `lib/caregiver/data.ts` |
+| Renewal reminder starts 60 days before expiry | `RENEWAL_WARN_DAYS` in `lib/caregiver/data.ts` |
+| Sample payouts, reviews and the rating after each visit | `approvalPatch()` in `lib/caregiver/store.tsx`, `SAMPLE_NEW_REVIEWS` in `lib/caregiver/data.ts` |
 | "Usually 2 working days" for verification | Caregiver verification screens and translations |
 | Caregiver Terms and Code of Conduct text | `CG_LEGAL` in `components/caregiver/AccountScreens.tsx` (a lawyer must write these) |
 | Caregiver app icon and name ("NAH Caregiver") | `public/caregiver/icons/`, `public/caregiver/manifest.webmanifest`, `app/caregiver/layout.tsx` |
@@ -181,6 +194,8 @@ Choose the language on the login screen or under Profile → Language. The choic
 | `components/caregiver/` | Caregiver screens: `SignupScreens` (sign-in and verification), `JobScreens` (requests), `VisitScreens` (the visit and the record), `WorkScreens` (schedule, settings, earnings), `AccountScreens` (profile, help, terms), `CgApp` (chooses the screen) |
 | `lib/caregiver/` | Caregiver sample requests, pay rules, reading checks (`data.ts`), rules (`rules.ts`) and saved state (`store.tsx`) |
 | `components/PhotoPicker.tsx` | Camera and photo picker shared by both apps (prescription, ID, selfie, certificate, wound photo) |
+| `components/caregiver/MoreScreens.tsx` | Notifications, ratings and reviews, report a problem, payouts and statement, patient cancelled, renew registration, renewal banner |
+| `lib/caregiver/engine.ts` | Request time limits and expiry, renewal reminders, "patient cancels" |
 | `public/caregiver/` | Caregiver home-screen icon and manifest |
 | `components/ui.tsx` | Shared parts: buttons, form fields, loading, error and empty states |
 

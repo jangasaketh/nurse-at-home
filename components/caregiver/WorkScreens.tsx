@@ -180,7 +180,7 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 export function EarningsScreen() {
-  const { state } = useCg();
+  const { state, open } = useCg();
   const load = useLoad(false);
   const totals = weekTotals(state.earnings);
   const earlier = state.earnings.filter((e) => e.at < weekStart());
@@ -207,6 +207,7 @@ export function EarningsScreen() {
               <div className="line"><span className="muted">{t("Cash you already collected")}</span><span>− {money(totals.cash)}</span></div>
               <div className="line total"><span>{owes ? t("Taken from your next payout") : t("To be paid")}</span><span>{money(Math.abs(totals.payout))}</span></div>
             </div>
+            <button type="button" className="btn btn-outline" onClick={() => open("payouts")}><Icon name="wallet" size={20} />{t("Payout history and statements")}</button>
 
             <div className="stack">
               <h2>{t("This week")}</h2>

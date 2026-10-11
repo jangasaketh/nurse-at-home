@@ -349,3 +349,17 @@ a.btn, a.list-row { text-decoration: none; }
 a.list-row { color: inherit; }
 a.btn-outline { color: var(--primary); }
 a.btn-danger-solid { color: #ffffff; }
+
+/* ---------- Caregiver app 1.0.5 ---------- */
+.notice-btn { width: 100%; text-align: left; align-items: flex-start; }
+.notice-icon { width: 34px; height: 34px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; background: var(--primary-tint); color: var(--primary); }
+.notice-icon.kind-cancelled, .notice-icon.kind-expired { background: #fde7d3; color: #8a3a00; }
+.notice-icon.kind-payout, .notice-icon.kind-rating, .notice-icon.kind-verified { background: var(--ok-bg); color: var(--ok); }
+.notice-icon.kind-document { background: var(--warn-bg); color: var(--warn-ink); }
+.timer-pill { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; padding: 3px 8px; border-radius: 8px; background: var(--warn-bg); color: var(--warn-ink); white-space: nowrap; }
+.timer-pill.hurry { background: var(--danger-bg); color: var(--danger); }
+.rating-summary { display: flex; gap: 18px; align-items: center; }
+.rating-big { font-family: var(--display); font-weight: 700; font-size: 40px; line-height: 1; }
+.bar-row { display: grid; grid-template-columns: 12px 1fr 18px; gap: 8px; align-items: center; }
+.bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.bar span { display: block; height: 100%; background: var(--accent); border-radius: 4px; }

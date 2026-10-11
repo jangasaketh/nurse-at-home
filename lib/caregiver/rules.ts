@@ -3,14 +3,70 @@
 import { CITIES } from "@/lib/data";
 import { addDays, dayInfo, msg, todayISO, type Msg } from "@/lib/booking";
 import { t } from "@/lib/i18n";
-import { DAYS, isUrgent, PAYOUT_DAY, serviceOf, servicesForRole, slotHour, type Job } from "./data";
-import type { CgState, Earning, KycStep } from "./store";
+import { DAYS, isUrgent, OFFER_MINUTES, OFFER_MINUTES_URGENT, PAYOUT_DAY, RENEWAL_WARN_DAYS, serviceOf, servicesForRole, slotHour, type Job, type Role } from "./data";
+import { FREE_UNTIL_HOURS } from "@/lib/data";
+import type { CgState, Earning, KycStep, Qualification } from "./store";
+
+/* ---------- Registration validity (nurses) ---------- */
+
+export type RegStatus = "ok" | "soon" | "expired" | "unknown";
+
+/** Last day of the "YYYY-MM" month. */
+const endOfMonth = (ym: string) => {
+  const [y, m] = ym.split("-").map(Number);
+  return new Date(y, m, 0, 23, 59, 59).getTime();
+};
+
+export function regStatus(q: Qualification | null, role: Role | null, nowMs = Date.now()): { status: RegStatus; daysLeft: number } {
+  if (role !== "nurse" || !q?.validUntil || !/^\d{4}-\d{2}$/.test(q.validUntil)) return { status: "unknown", daysLeft: 0 };
+  const daysLeft = Math.ceil((endOfMonth(q.validUntil) - nowMs) / 86400000);
+  return { status: daysLeft < 0 ? "expired" : daysLeft <= RENEWAL_WARN_DAYS ? "soon" : "ok", daysLeft };
+}
+
+/** "Mar 2027" in the current language. */
+export function monthLabel(ym: string) {
+  const [y, m] = ym.split("-").map(Number);
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${t(MONTHS[m - 1] ?? "Jan")} ${y}`;
+}
+
+/** A nurse whose registration has expired can only take the services a compounder can. */
+export function effectiveRole(s: CgState): Role | null {
+  if (s.role === "nurse" && regStatus(s.qualification, s.role).status === "expired") return "compounder";
+  return s.role;
+}
+
+/* ---------- Time limit to answer a request ---------- */
+
+export const offerWindowMs = (job: Job) => (isUrgent(job) ? OFFER_MINUTES_URGENT : OFFER_MINUTES) * 60000;
+/** Milliseconds left to answer, or null if the request has not been offered yet. */
+export function timeLeft(job: Job, s: CgState, nowMs = Date.now()) {
+  const at = s.offers[job.id];
+  return at === undefined ? null : at + offerWindowMs(job) - nowMs;
+}
+export const clock = (ms: number) => {
+  const sec = Math.max(0, Math.ceil(ms / 1000));
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
+};
+
+/* ---------- Patient cancels ---------- */
+
+/** Minutes until the visit starts (urgent visits are due now). */
+export function minutesUntilVisit(job: Job, nowMs = Date.now()) {
+  if (isUrgent(job)) return 0;
+  const d = new Date(`${addDays(todayISO(), job.dateOffset)}T00:00:00`);
+  d.setHours(slotHour(job.slot));
+  return Math.round((d.getTime() - nowMs) / 60000);
+}
+/** Same rule as the patient app: free until 2 hours before, unless the caregiver has already set off. */
+export const isLateCancel = (job: Job, setOff: boolean) => setOff || minutesUntilVisit(job) < FREE_UNTIL_HOURS * 60;
 
 /** Can this caregiver take this request, given their role, gender and work settings? */
 export function matchesSettings(job: Job, s: CgState) {
-  if (!s.role) return false;
+  const role = effectiveRole(s);
+  if (!role) return false;
   const service = serviceOf(job);
-  if (!servicesForRole(s.role).some((x) => x.id === service.id)) return false; // compounders: no injections, drips, medication
+  if (!servicesForRole(role).some((x) => x.id === service.id)) return false; // compounders (and lapsed registrations): no injections, drips, medication
   if (!s.availability.services.includes(service.id)) return false;
   if (job.womenOnly && s.personal?.gender !== "F") return false; // the patient asked for a woman caregiver
   if (job.distanceKm > s.availability.radiusKm) return false;
@@ -25,8 +81,12 @@ export function matchesSettings(job: Job, s: CgState) {
 export function visibleRequests(s: CgState, jobs: Job[]) {
   if (!s.online || s.kycStatus !== "approved") return [];
   const waiting = s.requestIds ?? jobs.map((j) => j.id);
-  const taken = new Set([...s.declined, ...s.upcoming.map((j) => j.id)]);
-  return jobs.filter((j) => waiting.includes(j.id) && !taken.has(j.id) && matchesSettings(j, s)).slice(0, 3);
+  const taken = new Set([...s.declined, ...s.expired, ...s.upcoming.map((j) => j.id)]);
+  const nowMs = Date.now();
+  return jobs
+    .filter((j) => waiting.includes(j.id) && !taken.has(j.id) && matchesSettings(j, s))
+    .filter((j) => { const left = timeLeft(j, s, nowMs); return left === null || left > 0; })
+    .slice(0, 3);
 }
 
 /** "Today, 10 Oct, 4:00 PM", or "As soon as possible" for urgent requests. */

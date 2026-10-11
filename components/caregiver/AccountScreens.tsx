@@ -5,7 +5,8 @@
 import { useState } from "react";
 import { useCg } from "@/lib/caregiver/store";
 import { ID_TYPES } from "@/lib/caregiver/data";
-import { cityName, maskAccount } from "@/lib/caregiver/rules";
+import { cityName, maskAccount, monthLabel, regStatus } from "@/lib/caregiver/rules";
+import { RegistrationBanner } from "./MoreScreens";
 import { SUPPORT } from "@/lib/data";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
@@ -23,6 +24,8 @@ export function CgProfileScreen() {
   const nurse = state.role === "nurse";
   const completed = state.records.filter((r) => r.kind === "completed").length;
   const idName = ID_TYPES.find((x) => x.id === state.idProof?.type)?.name ?? "";
+  const reg = regStatus(q, state.role);
+  const unread = state.notices.filter((n) => !n.read).length;
 
   return (
     <div className="screen">
@@ -47,9 +50,11 @@ export function CgProfileScreen() {
           { k: t("Phone"), v: `+91 ${state.phone}` },
           ...(p ? [{ k: t("Works in"), v: `${p.area}, ${cityName(p.cityId)}` }] : []),
           ...(q ? [{ k: nurse ? t("Registration") : t("Training"), v: nurse ? `${t(q.council)} · ${q.regNo}` : t(q.course) }] : []),
-          { k: t("Rating"), v: completed > 0 ? t("4.9 (sample)") : t("No ratings yet") },
+          { k: t("Rating"), v: state.reviews.length ? t("{avg} from {n} ratings", { avg: (state.reviews.reduce((s, r) => s + r.stars, 0) / state.reviews.length).toFixed(1), n: state.reviews.length }) : t("No ratings yet") },
           { k: t("Visits done"), v: String(completed) },
         ]} />
+
+        <RegistrationBanner />
 
         <div className="stack">
           <h2>{t("Language")}</h2>
@@ -66,13 +71,33 @@ export function CgProfileScreen() {
           <div className="list">
             <DocRow label={t("Government ID")} value={idName ? `${t(idName)}${state.idProof?.type === "aadhaar" ? ` •••• ${state.idProof.number}` : ""}` : t("Not added")} ok={!!state.idProof} />
             <DocRow label={t("Selfie")} value={state.selfie ? t("Added") : t("Not added")} ok={!!state.selfie} />
-            <DocRow label={nurse ? t("Registration certificate") : t("Training certificate")} value={q ? t(q.course) : t("Not added")} ok={!!q} />
+            <DocRow label={nurse ? t("Registration certificate") : t("Training certificate")}
+              value={q ? `${t(q.course)}${nurse && q.validUntil ? ` · ${t("Valid until {month}", { month: monthLabel(q.validUntil) })}` : ""}` : t("Not added")}
+              ok={!!q && reg.status !== "expired"} />
+            {nurse && q?.validUntil && (
+              <button type="button" className="list-row" onClick={() => open("renew")}>
+                <span className="row-inline"><Icon name="file" size={20} />{state.renewal ? t("Renewal being checked") : t("Renew registration")}</span><span className="end"><Icon name="next" size={18} /></span>
+              </button>
+            )}
             <DocRow label={t("Bank account for payouts")} value={state.bank ? `${maskAccount(state.bank.account)} · ${state.bank.ifsc}` : t("Not added")} ok={!!state.bank} />
           </div>
           <p className="small muted">{t("To change a verified document, contact support. It is checked again before the change.")}</p>
         </div>
 
         <div className="list">
+          <button type="button" className="list-row" onClick={() => open("notifications")}>
+            <span className="row-inline"><Icon name="bell" size={20} />{t("Notifications")}</span>
+            <span className="end">{unread > 0 && <span className="pill">{t("{n} new", { n: unread })}</span>}<Icon name="next" size={18} /></span>
+          </button>
+          <button type="button" className="list-row" onClick={() => open("ratings")}>
+            <span className="row-inline"><Icon name="heart" size={20} />{t("Ratings and reviews")}</span><span className="end"><Icon name="next" size={18} /></span>
+          </button>
+          <button type="button" className="list-row" onClick={() => open("payouts")}>
+            <span className="row-inline"><Icon name="wallet" size={20} />{t("Payouts and statements")}</span><span className="end"><Icon name="next" size={18} /></span>
+          </button>
+          <button type="button" className="list-row" onClick={() => open("report")}>
+            <span className="row-inline"><Icon name="alert" size={20} />{t("Report a problem")}</span><span className="end"><Icon name="next" size={18} /></span>
+          </button>
           <button type="button" className="list-row" onClick={() => open("availability")}>
             <span className="row-inline"><Icon name="calendar" size={20} />{t("Work settings")}</span><span className="end"><Icon name="next" size={18} /></span>
           </button>
@@ -138,7 +163,7 @@ const CG_FAQ = [
 ];
 
 export function CgHelpScreen() {
-  const { back } = useCg();
+  const { back, open } = useCg();
   const [openQ, setOpenQ] = useState<number | null>(null);
   return (
     <div className="screen">
@@ -161,6 +186,11 @@ export function CgHelpScreen() {
               </div>
             ))}
           </div>
+        </div>
+        <div className="stack">
+          <h2>{t("Report a problem")}</h2>
+          <p className="small muted">{t("Something went wrong at a visit, with a payment, or with the app? Tell us and support will call you.")}</p>
+          <button type="button" className="btn btn-outline" onClick={() => open("report")}>{t("Report a problem")}</button>
         </div>
         <div className="stack">
           <h2>{t("Talk to us")}</h2>

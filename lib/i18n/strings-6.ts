@@ -144,6 +144,8 @@ export const STRINGS_6: [string, string, string][] = [
   ["Documents sent", "పత్రాలు పంపబడ్డాయి", "ದಾಖಲೆಗಳನ್ನು ಕಳುಹಿಸಲಾಗಿದೆ"],
   ["Being checked by our team", "మా బృందం తనిఖీ చేస్తోంది", "ನಮ್ಮ ತಂಡ ಪರಿಶೀಲಿಸುತ್ತಿದೆ"],
   ["Approved", "ఆమోదించబడింది", "ಅನುಮೋದಿಸಲಾಗಿದೆ"],
+  ["Prototype: skip verification", "ప్రోటోటైప్: ధృవీకరణ దాటవేయండి", "ಪ್ರೋಟೋಟೈಪ್: ಪರಿಶೀಲನೆ ಬಿಟ್ಟುಬಿಡಿ"],
+  ["Fills sample details and documents for any step not done yet, and approves you straight away. Fill “Your details” first if you want your own name or city.", "పూర్తి చేయని దశలకు నమూనా వివరాలు, పత్రాలు నింపి, వెంటనే మిమ్మల్ని ఆమోదిస్తుంది. మీ సొంత పేరు లేదా నగరం కావాలంటే ముందు “మీ వివరాలు” నింపండి.", "ಮುಗಿಸದ ಹಂತಗಳಿಗೆ ಮಾದರಿ ವಿವರಗಳು ಮತ್ತು ದಾಖಲೆಗಳನ್ನು ತುಂಬಿ, ತಕ್ಷಣ ನಿಮ್ಮನ್ನು ಅನುಮೋದಿಸುತ್ತದೆ. ನಿಮ್ಮ ಸ್ವಂತ ಹೆಸರು ಅಥವಾ ನಗರ ಬೇಕಿದ್ದರೆ ಮೊದಲು “ನಿಮ್ಮ ವಿವರಗಳು” ತುಂಬಿ."],
   ["Prototype: approve me", "ప్రోటోటైప్: నన్ను ఆమోదించండి", "ಪ್ರೋಟೋಟೈಪ್: ನನ್ನನ್ನು ಅನುಮೋದಿಸಿ"],
   ["Prototype: ask for a new ID photo", "ప్రోటోటైప్: కొత్త ID ఫోటో అడగండి", "ಪ್ರೋಟೋಟೈಪ್: ಹೊಸ ID ಫೋಟೋ ಕೇಳಿ"],
   ["One document needs another look", "ఒక పత్రాన్ని మళ్ళీ చూడాలి", "ಒಂದು ದಾಖಲೆಯನ್ನು ಮತ್ತೆ ನೋಡಬೇಕಿದೆ"],

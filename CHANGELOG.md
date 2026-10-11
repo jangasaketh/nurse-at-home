@@ -10,6 +10,33 @@ For every version, these all carry the same number:
 
 ---
 
+## 1.0.5 (11 Oct 2026)
+
+Includes everything in 1.0.4 (the "Prototype: skip verification" button), which was not published on its own.
+
+**Caregiver app: seven new pieces**
+1. **Notifications:** a bell with an unread count on Jobs, and a notifications screen (also in Profile). New request, request ran out of time, patient cancelled, payout sent, registration expiring, rating received, verified, report received. Tapping one opens the right screen.
+2. **Ratings and reviews:** average, star breakdown, what patients mention most, and each review. A rating arrives after each finished visit (sample). Profile shows the real average.
+3. **Report a problem:** topic, optional visit, description, optional photo; a ticket number and a "Your reports" list. From Help and Profile.
+4. **Payout history and monthly statement:** past Monday payouts with bank references; a monthly summary for the last 3 months; download the statement as a CSV file for Excel or Google Sheets.
+5. **Time limit to answer a request:** a countdown on each request (3 minutes for urgent, 15 for others; placeholders). When it runs out, the request goes to someone else and the next one is offered.
+6. **When a patient cancels:** a screen with the reason, and whether the Rs 49 visit charge is paid (late: less than 2 hours before, or after setting off) or not (early).
+7. **Registration renewal:** nurses enter "registration valid until" when they sign up. From 60 days before, a banner and a notification remind them; after it lapses, they only get dressing and vitals requests until they renew. A renew screen takes the new certificate and date (prototype button approves it).
+
+**Also**
+- Jobs header fixed so the bell is never cut off on small phones.
+- All new text in Telugu and Kannada (`lib/i18n/strings-8.ts`).
+
+---
+
+## 1.0.4 (11 Oct 2026)
+
+- Caregiver app, for testing: a **"Prototype: skip verification"** button on the "Get verified" checklist. It fills sample details and documents for any step not done yet (keeping anything already filled, such as your own name and city) and approves you straight away, so every caregiver screen can be tried in a few taps.
+- The sample caregiver is a woman nurse (or compounder, if that role was chosen) in Hyderabad, so woman-only requests are included.
+- Remove the button before launch (search for "Prototype" in `components/caregiver/SignupScreens.tsx`).
+
+---
+
 ## 1.0.3 (11 Oct 2026)
 
 - Fix: the caregiver app could not be found from the patient app's first screen. The patient login screen now has a link, "Are you a nurse or compounder? Work with us", that opens the caregiver app. (Before, the only link was inside Profile, after logging in.)
