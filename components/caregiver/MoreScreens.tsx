@@ -207,6 +207,11 @@ export function ReportScreen() {
                     <span className="strong">{tk.id} · {t(tk.topic)}</span>
                     <span className="small muted">{tk.message.length > 70 ? `${tk.message.slice(0, 70)}…` : tk.message}</span>
                     <span className="tiny muted">{timeAgo(tk.at)}</span>
+                    {tk.reply && (
+                      <span className="tint-box small" style={{ marginTop: 4 }}>
+                        <span className="strong">{t("Reply from support")}: </span>{t(tk.reply.text)}
+                      </span>
+                    )}
                   </span>
                   <span className={`pill ${tk.status === "open" ? "pill-role" : "pill-ok"}`}>{tk.status === "open" ? t("Open") : t("Resolved")}</span>
                 </div>
@@ -475,4 +480,34 @@ export function RegistrationBanner() {
     );
   }
   return null;
+}
+
+/* ---------- Account paused by the admin team ---------- */
+
+export function SuspendedScreen() {
+  const { state, open } = useCg();
+  const unread = state.notices.filter((n) => !n.read).length;
+  return (
+    <div className="screen">
+      <Header title={t("Account paused")} />
+      <div className="scroll">
+        <span className="state-icon danger"><Icon name="alert" size={24} /></span>
+        <h1>{t("Your account is paused")}</h1>
+        {state.suspended && (
+          <div className="danger-box stack-sm">
+            <span className="strong">{t("Reason")}</span>
+            <span>{t(state.suspended.reason)}</span>
+          </div>
+        )}
+        <p className="muted">{t("While it is paused you get no requests. Visits you already accepted are given to another caregiver. If you think this is a mistake, contact support.")}</p>
+        <div className="stack">
+          <button type="button" className="btn btn-primary" onClick={() => open("help")}>{t("Help and support")}</button>
+          <button type="button" className="btn btn-outline" onClick={() => open("report")}>{t("Report a problem")}</button>
+          <button type="button" className="btn btn-outline" onClick={() => open("notifications")}>
+            {t("Notifications")}{unread > 0 ? ` (${unread})` : ""}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }

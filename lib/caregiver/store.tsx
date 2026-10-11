@@ -89,7 +89,7 @@ export type CgNotice = {
 
 export type Review = { id: string; stars: number; text: Msg; tags: string[]; service: Msg; patient: string; at: number; sample?: boolean };
 
-export type Ticket = { id: string; topic: string; visit: string | null; message: string; photo: PhotoFile | null; at: number; status: "open" | "resolved" };
+export type Ticket = { id: string; topic: string; visit: string | null; message: string; photo: PhotoFile | null; at: number; status: "open" | "resolved"; reply?: { text: string; at: number } | null };
 
 export type Payout = { id: string; at: number; amount: number; account: string; reference: string; sample?: boolean };
 
@@ -130,6 +130,8 @@ export type CgState = {
   expired: string[]; // requests that ran out of time
   lastCancel: PatientCancel | null;
   renewal: { certificate: PhotoFile; validUntil: string; at: number } | null; // renewed registration waiting for checking
+  tier: "full" | "basic"; // set by the verification team: "basic" = dressing and vitals only, even for a nurse
+  suspended: { reason: string; at: number } | null; // paused by the admin team: no requests until reinstated
 };
 
 const now = () => Date.now();
@@ -185,9 +187,12 @@ const initialState: CgState = {
   expired: [],
   lastCancel: null,
   renewal: null,
+  tier: "full",
+  suspended: null,
 };
 
-const STORAGE_KEY = "nurse-at-home-caregiver:v1";
+export const CG_STORAGE_KEY = "nurse-at-home-caregiver:v1";
+const STORAGE_KEY = CG_STORAGE_KEY;
 
 type Ctx = {
   state: CgState;
@@ -220,6 +225,19 @@ export function CaregiverProvider({ children }: { children: ReactNode }) {
       // Storage blocked or unreadable: start fresh.
     }
     setReady(true);
+    // The admin panel (another tab, same browser) can approve, send back or pause this caregiver.
+    // Take its changes as soon as they are saved. When the backend exists, this becomes a push from the server.
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== STORAGE_KEY || !e.newValue) return;
+      try {
+        const next = JSON.parse(e.newValue) as Partial<CgState>;
+        setState((prev) => (JSON.stringify(prev) === e.newValue ? prev : { ...initialState, ...next }));
+      } catch {
+        // Ignore unreadable data.
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   useEffect(() => {

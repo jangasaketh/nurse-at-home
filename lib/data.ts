@@ -336,3 +336,29 @@ export const LEGAL = {
     ],
   },
 };
+
+/* ---------- Prices set in the admin panel ---------- */
+// PROTOTYPE: the admin panel (/admin/) saves its settings in this browser. Service and vitals-check prices
+// set there are applied here, when the app opens, so a price change shows in the patient and caregiver apps.
+// When the backend exists, prices come from the API instead and this block is removed.
+export const ADMIN_STORAGE_KEY = "nurse-at-home-admin:v1";
+export const DEFAULT_SERVICE_PRICES: Record<string, number> = Object.fromEntries(SERVICES.map((s) => [s.id, s.price]));
+export const DEFAULT_CHECK_PRICES: Record<string, number> = Object.fromEntries(VITAL_CHECKS.map((c) => [c.id, c.price]));
+
+export function applyPrices(prices?: Record<string, number>, checks?: Record<string, number>) {
+  const ok = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n > 0;
+  for (const s of SERVICES) if (s.id !== VITALS_SERVICE_ID) s.price = ok(prices?.[s.id]) ? prices[s.id] : DEFAULT_SERVICE_PRICES[s.id];
+  for (const c of VITAL_CHECKS) c.price = ok(checks?.[c.id]) ? checks[c.id] : DEFAULT_CHECK_PRICES[c.id];
+  // The vitals "from" price is the cheapest check.
+  const vitals = SERVICES.find((s) => s.id === VITALS_SERVICE_ID);
+  if (vitals) vitals.price = Math.min(...VITAL_CHECKS.map((c) => c.price));
+}
+
+if (typeof window !== "undefined") {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(ADMIN_STORAGE_KEY) ?? "null");
+    if (saved?.settings) applyPrices(saved.settings.prices, saved.settings.checks);
+  } catch {
+    // Storage blocked or unreadable: the built-in prices stay.
+  }
+}

@@ -25,7 +25,7 @@ const notice = (n: Omit<CgNotice, "id" | "at" | "read">): CgNotice => ({ ...n, i
 
 export function useCaregiverEngine() {
   const { state, update, jobs } = useCg();
-  const approved = state.kycStatus === "approved";
+  const approved = state.kycStatus === "approved" && !state.suspended; // a paused account gets no requests
 
   // Offers and expiry: checked every second while online.
   useEffect(() => {

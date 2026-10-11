@@ -6,7 +6,7 @@ import { useState, type FormEvent } from "react";
 import { approvalPatch, useCg, KYC_STEPS, type CgState, type KycStep, type Qualification } from "@/lib/caregiver/store";
 import { sampleValidUntil } from "@/lib/caregiver/engine";
 import { COMPOUNDER_TRAINING, ID_TYPES, NURSE_COURSES, servicesForRole, SPOKEN_LANGUAGES, type IdType } from "@/lib/caregiver/data";
-import { cityState, idNumberError, IFSC_RE, isAdult, STEP_TITLES, stepDone, UPI_RE } from "@/lib/caregiver/rules";
+import { cityState, effectiveRole, idNumberError, IFSC_RE, isAdult, STEP_TITLES, stepDone, UPI_RE } from "@/lib/caregiver/rules";
 import { CITIES } from "@/lib/data";
 import { useAction } from "@/lib/fake-api";
 import { t } from "@/lib/i18n";
@@ -27,6 +27,10 @@ const samplePhoto = (name: string): PhotoFile => ({
   dataUrl: `data:image/svg+xml;utf8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="500"><rect width="400" height="500" fill="#e9eef3"/><text x="200" y="260" font-family="sans-serif" font-size="42" font-weight="700" fill="#7a8794" text-anchor="middle">SAMPLE</text></svg>')}`,
   addedAt: Date.now(),
 });
+
+/** When the verification team sent this step back, saving it again clears the request (the caregiver then resends). */
+const fixPatch = (state: CgState, step: KycStep): Partial<CgState> =>
+  state.rejected?.step === step ? { rejected: null, kycStatus: "draft" } : {};
 
 /* ---------- Sign in ---------- */
 
@@ -212,7 +216,7 @@ export function KycScreen() {
                 <span className="stack-xs" style={{ flex: 1, minWidth: 0 }}>
                   <span className="strong">{t(STEP_TITLES[step])}</span>
                   <span className={`small ${fix ? "error" : ok ? "ok-text" : "muted"}`}>
-                    {fix ? t("Needs a new photo") : ok ? t("Done") : t("Not started")}
+                    {fix ? (step === "personal" || step === "bank" ? t("Needs a change") : t("Needs a new photo")) : ok ? t("Done") : t("Not started")}
                   </span>
                 </span>
                 <span className="end"><Icon name="next" size={18} /></span>
@@ -269,7 +273,7 @@ export function PersonalScreen() {
   const save = () => {
     setTried(true);
     if (Object.values(errors).some(Boolean)) return;
-    back({ personal: { name: name.trim(), gender, dob, languages, cityId, area: area.trim(), pincode } });
+    back({ personal: { name: name.trim(), gender, dob, languages, cityId, area: area.trim(), pincode }, ...fixPatch(state, "personal") });
   };
   const toggle = (l: string) => setLanguages((cur) => (cur.includes(l) ? cur.filter((x) => x !== l) : [...cur, l]));
 
@@ -317,7 +321,7 @@ export function PersonalScreen() {
 /* ---------- Step: government ID ---------- */
 
 export function IdScreen() {
-  const { state, back, set } = useCg();
+  const { state, back } = useCg();
   const cur = state.idProof;
   const [type, setType] = useState<IdType | "">(cur?.type ?? "");
   const [number, setNumber] = useState(cur?.number ?? "");
@@ -327,9 +331,7 @@ export function IdScreen() {
   const save = () => {
     setTried(true);
     if (!type || numberError || !photo) return;
-    const fixed = state.rejected?.step === "id";
-    set({ rejected: fixed ? null : state.rejected, kycStatus: fixed ? "draft" : state.kycStatus });
-    back({ idProof: { type, number: number.trim().toUpperCase(), photo } });
+    back({ idProof: { type, number: number.trim().toUpperCase(), photo }, ...fixPatch(state, "id") });
   };
   return (
     <div className="screen">
@@ -368,12 +370,12 @@ export function IdScreen() {
 
 export function SelfieScreen() {
   const { state, back } = useCg();
-  const [photo, setPhoto] = useState<PhotoFile | null>(state.selfie);
+  const [photo, setPhoto] = useState<PhotoFile | null>(state.rejected?.step === "selfie" ? null : state.selfie);
   const [tried, setTried] = useState(false);
   const save = () => {
     setTried(true);
     if (!photo) return;
-    back({ selfie: photo });
+    back({ selfie: photo, ...fixPatch(state, "selfie") });
   };
   return (
     <div className="screen">
@@ -407,7 +409,7 @@ export function QualificationScreen() {
   const [years, setYears] = useState(q?.years ?? "");
   const [validUntil, setValidUntil] = useState(q?.validUntil ?? "");
   const thisMonth = new Date().toISOString().slice(0, 7);
-  const [certificate, setCertificate] = useState<PhotoFile | null>(q?.certificate ?? null);
+  const [certificate, setCertificate] = useState<PhotoFile | null>(state.rejected?.step === "qualification" ? null : q?.certificate ?? null);
   const [refName, setRefName] = useState(q?.refName ?? "");
   const [refPhone, setRefPhone] = useState(q?.refPhone ?? "");
   const [tried, setTried] = useState(false);
@@ -424,7 +426,7 @@ export function QualificationScreen() {
     setTried(true);
     if (Object.values(errors).some(Boolean)) return;
     const value: Qualification = { course, council: nurse ? council : "", regNo: regNo.trim().toUpperCase(), years, certificate, refName: refName.trim(), refPhone, validUntil: nurse ? validUntil : undefined };
-    back({ qualification: value });
+    back({ qualification: value, ...fixPatch(state, "qualification") });
   };
 
   return (
@@ -505,7 +507,7 @@ export function BankScreen() {
   const save = () => {
     setTried(true);
     if (Object.values(errors).some(Boolean)) return;
-    back({ bank: { holder: holder.trim(), account, ifsc, upi: upi.trim() } });
+    back({ bank: { holder: holder.trim(), account, ifsc, upi: upi.trim() }, ...fixPatch(state, "bank") });
   };
   return (
     <div className="screen">
@@ -529,7 +531,7 @@ export function BankScreen() {
 export function ReviewScreen() {
   const { state, set, update, go, open } = useCg();
   const status = state.kycStatus;
-  const services = servicesForRole(state.role ?? "nurse");
+  const services = servicesForRole(effectiveRole(state) ?? "nurse");
 
   if (status === "approved") {
     return (
@@ -538,6 +540,9 @@ export function ReviewScreen() {
           <div className="done-check"><Icon name="check" size={26} strokeWidth={3} /></div>
           <h1>{t("You are verified")}</h1>
           <p className="muted">{state.role === "nurse" ? t("Your nursing registration is confirmed.") : t("Your training is confirmed.")}</p>
+          {state.role === "nurse" && state.tier === "basic" && (
+            <div className="tint-box small">{t("For now you get wound dressing, elder care dressing and vitals requests. We will tell you when injections and drips are added.")}</div>
+          )}
           <div className="card stack">
             <h2>{t("Visits you can take")}</h2>
             {services.map((s) => (
@@ -584,8 +589,9 @@ export function ReviewScreen() {
             </div>
           ))}
         </div>
-        {/* There is no admin panel yet, so these buttons stand in for the verification team. Remove before launch. */}
+        {/* Prototype: the admin panel (same browser) can check these documents. The buttons below stand in for it. Remove before launch. */}
         <div className="dashed-box stack">
+          <a className="btn btn-outline" href={`${BASE}/admin/`} target="_blank" rel="noreferrer">{t("Prototype: check these documents in the admin panel")}</a>
           <button type="button" className="btn btn-demo" onClick={() => update((prev) => approvalPatch(prev))}>{t("Prototype: approve me")}</button>
           <button type="button" className="link-btn" onClick={() => set({ kycStatus: "rejected", rejected: { step: "id", reason: "The ID photo is blurred. Take it again in good light." } })}>
             {t("Prototype: ask for a new ID photo")}

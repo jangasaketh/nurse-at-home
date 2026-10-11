@@ -30,9 +30,10 @@ export function monthLabel(ym: string) {
   return `${t(MONTHS[m - 1] ?? "Jan")} ${y}`;
 }
 
-/** A nurse whose registration has expired can only take the services a compounder can. */
+/** A nurse whose registration has expired, or who was approved for dressing and vitals only, can only take the services a compounder can. */
 export function effectiveRole(s: CgState): Role | null {
   if (s.role === "nurse" && regStatus(s.qualification, s.role).status === "expired") return "compounder";
+  if (s.role === "nurse" && s.tier === "basic") return "compounder";
   return s.role;
 }
 
