@@ -32,7 +32,21 @@ export const getLang = () => current;
 // Keys asked for but not translated. Visible in the browser console as window.__i18nMissing.
 const missing = new Set<string>();
 
+// Testing aid: when a test sets window.__i18nCollect, every text asked for is recorded (in any language),
+// so a test run can list all texts used on screen and check each has a translation. Off for real users.
+type CollectWindow = { __i18nCollect?: boolean; __i18nSeen?: string[]; __i18nReport?: (text: string) => void };
+const seen = new Set<string>();
+function collect(text: string) {
+  if (typeof window === "undefined") return;
+  const w = window as unknown as CollectWindow;
+  if (!w.__i18nCollect || seen.has(text)) return;
+  seen.add(text);
+  w.__i18nSeen = Array.from(seen);
+  w.__i18nReport?.(text);
+}
+
 export function t(text: string, vars?: Record<string, string | number>) {
+  collect(text);
   let out = text;
   if (current !== "en" && text) {
     const hit = TABLE[current].get(text);

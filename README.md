@@ -1,10 +1,17 @@
-# Nurse at Home: patient app
+# Nurse at Home: patient app and caregiver app
 
-Web app for booking verified nurses and compounders for home visits: injections, IV drips, wound dressing, elder care dressing, scheduled medication and vitals checks.
+Two web apps in one project, published together on one site:
 
-This is the **frontend only**. There is no server yet. Caregivers, prices and ratings are sample data. What a person enters (name, family, addresses, bookings) is saved in their own browser, so it survives a refresh on that device but is not shared with any other device. "Nurse at Home" is a placeholder name.
+| App | Who it is for | Address on GitHub Pages |
+| --- | --- | --- |
+| **Patient app** | Families booking home visits: injections, IV drips, wound dressing, elder care dressing, scheduled medication and vitals checks | `https://YOUR-USERNAME.github.io/nurse-at-home/` |
+| **Caregiver app** | Nurses and compounders: sign up and get verified, take visit requests, carry out each visit, see earnings | `https://YOUR-USERNAME.github.io/nurse-at-home/caregiver/` |
 
-**Current version: 1.0.1.** Each update gets the next number (1.0.1, 1.0.2, …). What changed in each version is in `CHANGELOG.md`. The version is set in `package.json` and is shown at the bottom of Profile in the app.
+Each app has its own colour (green for patients, blue for caregivers), its own home-screen icon and its own saved data. They link to each other: Profile in the patient app → "Are you a nurse or compounder?", and the caregiver login → "Need a nurse at home?".
+
+This is the **frontend only**. There is no server yet. Caregivers, patients, requests, prices, ratings and earnings are sample data. The two apps do not talk to each other yet: a booking made in the patient app does not appear in the caregiver app until there is a server. What a person enters (name, family, addresses, bookings) is saved in their own browser, so it survives a refresh on that device but is not shared with any other device. "Nurse at Home" is a placeholder name.
+
+**Current version: 1.0.2.** Each update gets the next number (1.0.1, 1.0.2, …). What changed in each version is in `CHANGELOG.md`. The version is set in `package.json` and is shown at the bottom of Profile in the app.
 
 ## Reminder: the cancellation rule is provisional
 
@@ -33,7 +40,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000. To log in, keep the sample mobile number and type any 6 digits as the OTP.
+Open http://localhost:3000 for the patient app and http://localhost:3000/caregiver/ for the caregiver app. To log in, keep the sample mobile number and type any 6 digits as the OTP.
 
 ## Host it on GitHub Pages
 
@@ -42,11 +49,37 @@ A Next.js project has no `index.html` until it is built, so GitHub Pages needs a
 1. Keep `next.config.mjs` in the same folder as `package.json`.
 2. In the repository, open Settings, then Pages, and set Source to "GitHub Actions".
 3. Keep the workflow file at `.github/workflows/deploy.yml`.
-4. Every commit rebuilds the page. The Actions tab shows progress. The page is at `https://YOUR-USERNAME.github.io/YOUR-REPO/`.
+4. Every commit rebuilds both apps. The Actions tab shows progress. The patient app is at `https://YOUR-USERNAME.github.io/YOUR-REPO/` and the caregiver app at `https://YOUR-USERNAME.github.io/YOUR-REPO/caregiver/`. Nothing extra is needed for the caregiver app: it is built by the same workflow.
 
 Vercel and Netlify also work: import the repository and deploy with the default settings.
 
-## What to test
+## What to test: caregiver app
+
+Open `/caregiver/`. Any 6 digits work as the OTP.
+
+**Sign-up and verification**
+- Choose "Registered nurse" or "Compounder or trained helper". Compounders are told that injections, drips and medication are for nurses only.
+- Five steps: your details (18+ only), government ID (Aadhaar asks only for the last 4 digits; photo only), selfie (front camera), qualification (nurses: course, state nursing council, registration number, certificate; compounders: training and an optional reference), bank account (account number twice, IFSC checked).
+- Tick the agreement and send. On the waiting screen, the prototype buttons stand in for the verification team: "approve me", or "ask for a new ID photo" to see the fix-and-resend flow.
+
+**Jobs**
+- Go online with the switch. Up to three sample requests appear, each with time, area and distance, the patient's first name, and what you will earn. Urgent and repeat-visit requests are marked.
+- A compounder never sees injections, drips or medication. A man never sees requests where the patient asked for a woman.
+- Open a request: the full address appears only after you accept. Decline asks for a reason.
+- Two visits at the same time are refused.
+
+**A visit**
+- Start the trip → I have arrived → enter the patient's arrival code (4821 in the prototype) → safety check (for injections, drips and medication, the prescription and medicine checks) → care → write the record.
+- The record asks for what fits the service: injection site and reaction, amount of fluid, wound state and next dressing (with an optional wound photo), doses and side effects, or the vitals readings. Readings outside the usual range show a plain-language warning to pass to the family.
+- Cash visits ask you to confirm you collected the payment.
+- "Nobody is answering?" starts a 10-minute wait, then lets you mark the visit as missed (Rs 49 paid to you). "Something does not match" stops the visit safely. "I cannot do this visit" cancels with a reason. SOS is on every visit screen.
+
+**Schedule, earnings, profile**
+- Schedule lists accepted visits by day; repeat visits move to the next day after each visit. Work settings set days, hours, distance, services and urgent requests, and the requests change to match.
+- Earnings shows this week's payout (paid Mondays), with cash you already collected taken off. A few sample entries show how it works.
+- Profile shows verification, documents, language, install, help, and the Code of Conduct.
+
+## What to test: patient app
 
 **Install on a phone** (needs the GitHub Pages link, which is https)
 - Android, in Chrome: an "Install the app" card appears on Home. Tap Install, and the app gets its own icon. "Not now" hides the card; Profile → App on your phone still offers it.
@@ -113,6 +146,11 @@ Choose the language on the login screen or under Profile → Language. The choic
 | Support phone, WhatsApp, email, hours | `SUPPORT` in `lib/data.ts` |
 | Cancellation and reschedule rule (provisional, see the reminder at the top) | Switch and numbers in `lib/data.ts`; logic in `changeFee()` in `lib/booking.ts`; matching FAQ answer |
 | App icon and home-screen name ("Nurse at Home") | `public/icons/`, `public/manifest.webmanifest`, `app/layout.tsx` |
+| Caregiver pay split: 80% of the service price, all of the Rs 49 visit charge, half of the urgent charge | `CAREGIVER_SHARE`, `VISIT_FEE_SHARE`, `URGENT_SHARE` in `lib/caregiver/data.ts` |
+| "Usually 2 working days" for verification | Caregiver verification screens and translations |
+| Caregiver Terms and Code of Conduct text | `CG_LEGAL` in `components/caregiver/AccountScreens.tsx` (a lawyer must write these) |
+| Caregiver app icon and name ("NAH Caregiver") | `public/caregiver/icons/`, `public/caregiver/manifest.webmanifest`, `app/caregiver/layout.tsx` |
+| Caregiver prototype buttons ("approve me", "skip the wait", "use the sample note", sample requests) | `components/caregiver/` (search for "Prototype") |
 | Telugu and Kannada wording (trial, needs native-speaker review) | `lib/i18n/strings-*.ts` |
 | Terms of Use and Privacy Policy text | `LEGAL` in `lib/data.ts` (a lawyer must write these) |
 | Prototype tools block and Prototype buttons | `ProfileScreen` in `components/TabScreens.tsx`, and the dashed box in `TrackingScreen` in `components/VisitScreens.tsx` (delete them) |
@@ -139,13 +177,20 @@ Choose the language on the login screen or under Profile → Language. The choic
 | `components/PrescriptionPicker.tsx`, `lib/prescription.ts` | Prescription camera and file picker, photo shrinking, preview |
 | `components/InstallCard.tsx`, `lib/install.ts` | "Install the app" card for Android and iPhone |
 | `public/manifest.webmanifest`, `public/icons/`, `public/sw.js` | App name and icons for the home screen; offline support (service worker) |
+| `app/caregiver/` | The caregiver app's page and its name, icon and manifest |
+| `components/caregiver/` | Caregiver screens: `SignupScreens` (sign-in and verification), `JobScreens` (requests), `VisitScreens` (the visit and the record), `WorkScreens` (schedule, settings, earnings), `AccountScreens` (profile, help, terms), `CgApp` (chooses the screen) |
+| `lib/caregiver/` | Caregiver sample requests, pay rules, reading checks (`data.ts`), rules (`rules.ts`) and saved state (`store.tsx`) |
+| `components/PhotoPicker.tsx` | Camera and photo picker shared by both apps (prescription, ID, selfie, certificate, wound photo) |
+| `public/caregiver/` | Caregiver home-screen icon and manifest |
 | `components/ui.tsx` | Shared parts: buttons, form fields, loading, error and empty states |
 
 ## Not built yet
 
 Search for `TODO` in the code to find each spot.
 
-- A server and database: real OTP by SMS, accounts that work across devices
+- A server and database: real OTP by SMS, accounts that work across devices, and connecting the two apps (a patient booking reaching a real caregiver)
+- Verification by a real team (the admin panel), and storing ID and certificate photos privately
+- Real payouts to caregivers' bank accounts
 - Uploading the prescription to a server (today it is kept only in the browser, and a PDF is not previewed)
 - Live map and caregiver location
 - Payments and refunds

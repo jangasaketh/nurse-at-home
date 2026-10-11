@@ -269,6 +269,11 @@ export function ProfileScreen() {
             <span className="row-inline"><Icon name="help" size={20} />{t("Help and support")}</span>
             <span className="end"><Icon name="next" size={18} /></span>
           </button>
+          {/* The caregiver app lives on the same site, at /caregiver/. */}
+          <a className="list-row" href={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/caregiver/`}>
+            <span className="row-inline"><Icon name="bag" size={20} />{t("Are you a nurse or compounder? Work with us")}</span>
+            <span className="end"><Icon name="next" size={18} /></span>
+          </a>
           <button type="button" className="list-row" onClick={() => open("legal", { legalDoc: "terms" })}>
             <span className="row-inline"><Icon name="file" size={20} />{t("Terms of Use")}</span>
             <span className="end"><Icon name="next" size={18} /></span>

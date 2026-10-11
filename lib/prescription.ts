@@ -1,4 +1,4 @@
-// Getting a prescription from the phone camera, the gallery or a PDF.
+// Getting a prescription (or another document photo) from the phone camera, the gallery or a PDF.
 //
 // Photos are shrunk before they are kept (longest side 1600 px, JPEG), so a 5 MB camera photo becomes
 // about 200 to 400 KB. That keeps them small enough to save in the browser now, and quick to upload later.
@@ -56,9 +56,18 @@ function shrink(img: HTMLImageElement, longSide: number, quality: number) {
 /** Bytes taken by a base64 data URL. */
 const dataUrlBytes = (dataUrl: string) => Math.round(((dataUrl.length - dataUrl.indexOf(",") - 1) * 3) / 4);
 
+/** Any document photo (ID, selfie, certificate). Same shape as a prescription. */
+export type PhotoFile = Prescription;
+
 /** Checks the file and turns it into a Prescription. Throws PrescriptionProblem when it cannot be used. */
 export async function preparePrescription(file: File): Promise<Prescription> {
+  return preparePhoto(file, true);
+}
+
+/** Checks a photo (or, when allowed, a PDF) and shrinks it. Throws PrescriptionProblem when it cannot be used. */
+export async function preparePhoto(file: File, allowPdf: boolean): Promise<PhotoFile> {
   if (isPdf(file)) {
+    if (!allowPdf) throw new PrescriptionProblem("type");
     if (file.size > MAX_PDF_BYTES) throw new PrescriptionProblem("pdf-too-big");
     return { kind: "pdf", name: file.name, size: file.size, dataUrl: null, addedAt: Date.now() };
   }

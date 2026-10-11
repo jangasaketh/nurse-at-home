@@ -3,7 +3,8 @@
 import { useState, type FormEvent } from "react";
 import { useApp } from "@/lib/store";
 import { SELF } from "@/lib/booking";
-import { LANGS, t } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
+import { LanguageChips } from "./LanguageChips";
 import { Icon } from "./Icon";
 import { CheckRow, Header, TextField } from "./ui";
 
@@ -12,15 +13,7 @@ const digits = (value: string, max: number) => value.replace(/\D/g, "").slice(0,
 /** English / తెలుగు / ಕನ್ನಡ. Each name is written in its own script so people can find theirs. */
 export function LanguagePicker() {
   const { state, set } = useApp();
-  return (
-    <div className="lang-row" role="group" aria-label="Language / భాష / ಭಾಷೆ">
-      {LANGS.map((l) => (
-        <button key={l.id} type="button" className="chip" lang={l.id} aria-pressed={state.lang === l.id} onClick={() => set({ lang: l.id })}>
-          {l.label}
-        </button>
-      ))}
-    </div>
-  );
+  return <LanguageChips value={state.lang} onChange={(lang) => set({ lang })} />;
 }
 
 export function LoginScreen() {

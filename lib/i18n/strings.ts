@@ -5,5 +5,9 @@ import { STRINGS_2 } from "./strings-2";
 import { STRINGS_3 } from "./strings-3";
 import { STRINGS_4 } from "./strings-4";
 import { STRINGS_5 } from "./strings-5";
+import { STRINGS_6 } from "./strings-6"; // caregiver app: sign-in, verification, jobs
+import { STRINGS_7 } from "./strings-7"; // caregiver app: visit, record, schedule, earnings, profile
 
-export const STRINGS: [string, string, string][] = [...STRINGS_1, ...STRINGS_2, ...STRINGS_3, ...STRINGS_4, ...STRINGS_5];
+export const STRINGS: [string, string, string][] = [
+  ...STRINGS_1, ...STRINGS_2, ...STRINGS_3, ...STRINGS_4, ...STRINGS_5, ...STRINGS_6, ...STRINGS_7,
+];

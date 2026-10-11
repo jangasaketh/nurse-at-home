@@ -10,6 +10,25 @@ For every version, these all carry the same number:
 
 ---
 
+## 1.0.2 (10 Oct 2026)
+
+**New: the caregiver app**, at `/caregiver/` on the same site, for nurses and compounders. Own colour (blue), own home-screen icon, own saved data.
+- Sign in with OTP, choose a role (registered nurse, or compounder / trained helper).
+- Verification in 5 steps: details (18+), government ID (Aadhaar last 4 digits only), selfie (front camera), qualification (nurse: course, state council, registration number, certificate; compounder: training, optional reference), bank account (IFSC checked). Agreement, send, waiting screen; a document can be sent back for a new photo and resent.
+- Jobs: go online, see up to 3 requests that fit your role, gender, distance, days, hours, services and urgent setting. Each shows what you earn. Accept (address shown after) or decline with a reason. Same-time clashes are refused.
+- Visit: start the trip, running-late notice, arrival code, 10-minute "nobody is answering" wait then missed visit (Rs 49 paid), safety check with the prescription and medicine checks, care, SOS, cancel with a reason.
+- Visit record per service: injection site and reaction, fluid amount, wound state and next dressing with optional wound photo, doses and side effects, vitals readings with plain-language warnings, cash collected.
+- Schedule by day with repeat visits; work settings; earnings with weekly Monday payout minus cash collected; profile, documents, help (7 questions), Caregiver Terms and Code of Conduct (placeholders).
+- English, Telugu and Kannada (`lib/i18n/strings-6.ts`, `strings-7.ts`).
+
+**Shared and patient app**
+- The photo picker is now shared by both apps (`components/PhotoPicker.tsx`).
+- Patient Profile links to the caregiver app; the caregiver login links back.
+- Offline support covers both apps, each opening its own saved page.
+- Link buttons no longer show an underline.
+
+---
+
 ## 1.0.1 (10 Oct 2026)
 
 **Install the app on a phone**

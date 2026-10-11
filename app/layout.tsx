@@ -2,9 +2,19 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
 
+// Files in public/ are not given the GitHub Pages prefix automatically, so add it here.
+const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
+// The patient app. The caregiver app (app/caregiver/layout.tsx) replaces the name, icon and manifest.
 export const metadata: Metadata = {
   title: "Nurse at Home",
   description: "Book verified nurses and compounders for injections, IV drips and dressing at home.",
+  manifest: `${BASE}/manifest.webmanifest`,
+  icons: {
+    icon: [{ url: `${BASE}/icons/favicon-48.png`, sizes: "48x48", type: "image/png" }],
+    apple: `${BASE}/icons/apple-touch-icon.png`,
+  },
+  appleWebApp: { capable: true, title: "Nurse at Home", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {
@@ -13,20 +23,10 @@ export const viewport: Viewport = {
   themeColor: "#0E5C4A",
 };
 
-// Files in public/ are not given the GitHub Pages prefix automatically, so add it here.
-const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <head>
-        <link rel="manifest" href={`${BASE}/manifest.webmanifest`} />
-        <link rel="icon" type="image/png" sizes="48x48" href={`${BASE}/icons/favicon-48.png`} />
-        <link rel="apple-touch-icon" href={`${BASE}/icons/apple-touch-icon.png`} />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-title" content="Nurse at Home" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link

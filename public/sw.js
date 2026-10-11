@@ -1,4 +1,4 @@
-// Service worker: lets the installed app open quickly and work without internet for screens already loaded.
+// Service worker: lets the installed apps (patient and caregiver) open quickly and work without internet.
 // Registered from app/page.tsx as sw.js?v=<app version>. A new version installs a new cache and removes the old one.
 //
 //   Pages:                       network first, saved copy when offline
@@ -11,21 +11,34 @@ const PREFIX = "nurse-at-home-";
 const CACHE = PREFIX + VERSION;
 const SCOPE = self.registration.scope; // e.g. https://user.github.io/nurse-at-home/
 
+// Both apps live on this site: the patient app at the scope root, the caregiver app at caregiver/.
+const PAGES = [SCOPE, SCOPE + "caregiver/"];
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(CACHE);
-      // Save the app page, then every script and stylesheet it uses, so the app opens offline.
-      const res = await fetch(SCOPE, { cache: "no-store" });
-      const html = await res.clone().text();
-      await cache.put(SCOPE, res);
-      const urls = new Set(["manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"].map((p) => SCOPE + p));
-      for (const m of html.matchAll(/(?:src|href)="([^"]+\.(?:js|css|woff2))"/g)) urls.add(new URL(m[1], SCOPE).href);
+      const urls = new Set(["manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png", "caregiver/manifest.webmanifest", "caregiver/icons/icon-192.png"].map((p) => SCOPE + p));
+      // Save each app page, then every script and stylesheet it uses, so both apps open offline.
+      for (const page of PAGES) {
+        try {
+          const res = await fetch(page, { cache: "no-store" });
+          if (!res.ok) continue;
+          const html = await res.clone().text();
+          await cache.put(page, res);
+          for (const m of html.matchAll(/(?:src|href)="([^"]+\.(?:js|css|woff2))"/g)) urls.add(new URL(m[1], page).href);
+        } catch {
+          // Offline during install: the page is saved the next time it is opened.
+        }
+      }
       await Promise.all([...urls].map((u) => cache.add(u).catch(() => {})));
       await self.skipWaiting();
     })(),
   );
 });
+
+/** The saved copy for a page address: /caregiver/... pages share the caregiver app page. */
+const pageKey = (url) => (url.pathname.startsWith(new URL(SCOPE).pathname + "caregiver") ? SCOPE + "caregiver/" : SCOPE);
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
@@ -43,13 +56,14 @@ self.addEventListener("fetch", (event) => {
   const sameOrigin = url.origin === self.location.origin;
 
   if (req.mode === "navigate" && sameOrigin) {
+    const key = pageKey(url);
     event.respondWith(
       fetch(req)
         .then((res) => {
-          if (res.ok) caches.open(CACHE).then((c) => c.put(SCOPE, res.clone()));
+          if (res.ok) caches.open(CACHE).then((c) => c.put(key, res.clone()));
           return res;
         })
-        .catch(async () => (await caches.match(SCOPE)) || Response.error()),
+        .catch(async () => (await caches.match(key)) || Response.error()),
     );
     return;
   }

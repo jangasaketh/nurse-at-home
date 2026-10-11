@@ -1,0 +1,19 @@
+{
+  "name": "Nurse at Home · Caregiver",
+  "short_name": "NAH Caregiver",
+  "description": "For nurses and compounders: get home-visit requests, run each visit, and track your earnings.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F1F4F8",
+  "theme_color": "#1D4E89",
+  "lang": "en",
+  "categories": ["health", "medical", "business"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
