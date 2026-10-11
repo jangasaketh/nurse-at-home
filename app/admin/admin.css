@@ -1,5 +1,6 @@
 /* ADMIN PANEL. Desktop first: a side menu and wide tables. On a phone the menu becomes a top strip. */
-.adm {
+/* Colours for every admin screen, including sign-in and loading (which sit outside the main layout). */
+.adm, .adm-login, .adm-splash {
   --a-bg: #f3f5f7;
   --a-surface: #ffffff;
   --a-ink: #15232b;
@@ -19,6 +20,9 @@
   --a-danger-bg: #fce9e7;
   --a-ok: #1f5b2e;
   --a-ok-bg: #e3f0e5;
+  color: var(--a-ink);
+}
+.adm {
   min-height: 100dvh;
   background: var(--a-bg);
   color: var(--a-ink);
@@ -43,7 +47,7 @@
 .adm-nav button:hover { background: rgba(255, 255, 255, 0.07); }
 .adm-nav button[aria-current="page"] { background: #fff; color: var(--a-side); }
 .adm-nav .count { margin-left: auto; min-width: 22px; height: 22px; border-radius: 11px; padding: 0 7px; background: #f0a81c; color: #2b1d00; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
-.adm-nav .count.red { background: #e5534b; color: #fff; }
+.adm-nav .count.red { background: #c62828; color: #fff; }
 .adm-side-foot { margin-top: auto; padding: 14px 8px 0; font-size: 12px; color: #9fb3b9; display: flex; flex-direction: column; gap: 8px; }
 .adm-side-foot a { color: #cfe0e4; }
 
@@ -178,7 +182,8 @@ button.astat:hover { border-color: var(--a-line-strong); }
 
 /* Sign-in */
 .adm-login { min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 24px 16px; background: linear-gradient(160deg, #10262e, #0e5c4a); }
-.adm-login .acard { width: min(420px, 100%); padding: 28px; gap: 16px; }
+.adm-login .acard { width: min(420px, 100%); padding: 28px; gap: 16px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); }
+.adm-login h1 { color: var(--a-ink); }
 
 /* Toast */
 .atoast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: #10262e; color: #fff; padding: 11px 18px; border-radius: 10px; font-weight: 500; z-index: 60; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); max-width: calc(100% - 32px); }
