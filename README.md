@@ -7,11 +7,11 @@ Two web apps in one project, published together on one site:
 | **Patient app** | Families booking home visits: injections, IV drips, wound dressing, elder care dressing, scheduled medication and vitals checks | `https://YOUR-USERNAME.github.io/nurse-at-home/` |
 | **Caregiver app** | Nurses and compounders: sign up and get verified, take visit requests, carry out each visit, see earnings | `https://YOUR-USERNAME.github.io/nurse-at-home/caregiver/` |
 
-Each app has its own colour (green for patients, blue for caregivers), its own home-screen icon and its own saved data. They link to each other: Profile in the patient app → "Are you a nurse or compounder?", and the caregiver login → "Need a nurse at home?".
+Each app has its own colour (green for patients, blue for caregivers), its own home-screen icon and its own saved data. They link to each other: the patient login screen and Profile → "Are you a nurse or compounder? Work with us", and the caregiver login → "Need a nurse at home?".
 
 This is the **frontend only**. There is no server yet. Caregivers, patients, requests, prices, ratings and earnings are sample data. The two apps do not talk to each other yet: a booking made in the patient app does not appear in the caregiver app until there is a server. What a person enters (name, family, addresses, bookings) is saved in their own browser, so it survives a refresh on that device but is not shared with any other device. "Nurse at Home" is a placeholder name.
 
-**Current version: 1.0.2.** Each update gets the next number (1.0.1, 1.0.2, …). What changed in each version is in `CHANGELOG.md`. The version is set in `package.json` and is shown at the bottom of Profile in the app.
+**Current version: 1.0.3.** Each update gets the next number (1.0.1, 1.0.2, …). What changed in each version is in `CHANGELOG.md`. The version is set in `package.json` and is shown at the bottom of Profile in the app.
 
 ## Reminder: the cancellation rule is provisional
 

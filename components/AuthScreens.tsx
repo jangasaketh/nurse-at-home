@@ -56,6 +56,8 @@ export function LoginScreen() {
         <button type="submit" className="btn btn-primary" style={{ marginTop: 8 }}>{t("Send OTP")}</button>
       </div>
       <div className="spacer" />
+      {/* The caregiver app lives on the same site, at /caregiver/. */}
+      <a className="link-btn small" href={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/caregiver/`}>{t("Are you a nurse or compounder? Work with us")}</a>
       <p className="tiny muted">{t("Prototype. Caregivers, prices and ratings are examples. What you enter stays on this device.")}</p>
     </form>
   );

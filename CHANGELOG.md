@@ -10,6 +10,13 @@ For every version, these all carry the same number:
 
 ---
 
+## 1.0.3 (11 Oct 2026)
+
+- Fix: the caregiver app could not be found from the patient app's first screen. The patient login screen now has a link, "Are you a nurse or compounder? Work with us", that opens the caregiver app. (Before, the only link was inside Profile, after logging in.)
+- The caregiver app itself is unchanged. Direct address: `https://jangasaketh.github.io/nurse-at-home/caregiver/`
+
+---
+
 ## 1.0.2 (10 Oct 2026)
 
 **New: the caregiver app**, at `/caregiver/` on the same site, for nurses and compounders. Own colour (blue), own home-screen icon, own saved data.
