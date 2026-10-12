@@ -4,7 +4,7 @@
 // When the backend exists, all of this comes from the API instead.
 
 import {
-  CITIES, DEFAULT_CHECK_PRICES, DEFAULT_SERVICE_PRICES, FREE_UNTIL_HOURS, GRACE_MINUTES, LATE_MINUTES, NO_SHOW_MINUTES,
+  CITIES, SERVICE_CATALOG, DEFAULT_CHECK_PRICES, DEFAULT_SERVICE_PRICES, servicesFromPrices, type ServiceSetting, FREE_UNTIL_HOURS, GRACE_MINUTES, LATE_MINUTES, NO_SHOW_MINUTES,
   SERVICES, SLOTS, URGENT_FEE, VISIT_FEE, VITAL_CHECKS,
 } from "@/lib/data";
 import {
@@ -12,7 +12,43 @@ import {
 } from "@/lib/caregiver/data";
 import type { PhotoFile } from "@/lib/prescription";
 
-export type AdminPage = "dashboard" | "verification" | "caregivers" | "bookings" | "refunds" | "support" | "payouts" | "settings" | "activity";
+export type AdminPage =
+  | "dashboard" | "verification" | "caregivers" | "patients" | "bookings" | "refunds" | "support" | "messages"
+  | "payouts" | "reports" | "settings" | "team" | "activity";
+
+/* ---------- Team roles: who may open which page ---------- */
+
+export type AdminRole = "owner" | "verification" | "support" | "finance";
+export const ROLE_TEXT: Record<AdminRole, string> = {
+  owner: "Owner",
+  verification: "Verification team",
+  support: "Support team",
+  finance: "Finance team",
+};
+export const ROLE_HELP: Record<AdminRole, string> = {
+  owner: "Everything, including settings, the team and the activity log.",
+  verification: "Checks caregivers' documents and renewals, pauses caregivers, sends messages to caregivers.",
+  support: "Patients, bookings, refunds, support tickets and messages to caregivers.",
+  finance: "Payouts, refunds, reports and bookings.",
+};
+export const ROLE_PAGES: Record<AdminRole, AdminPage[]> = {
+  owner: ["dashboard", "verification", "caregivers", "patients", "bookings", "refunds", "support", "messages", "payouts", "reports", "settings", "team", "activity"],
+  verification: ["dashboard", "verification", "caregivers", "messages"],
+  support: ["dashboard", "patients", "bookings", "refunds", "support", "messages"],
+  finance: ["dashboard", "bookings", "refunds", "payouts", "reports"],
+};
+export const canOpen = (role: AdminRole, page: AdminPage) => ROLE_PAGES[role].includes(page);
+
+export type TeamMember = { id: string; name: string; email: string; role: AdminRole; active: boolean; addedAt: number };
+
+export function sampleTeam(nowMs = Date.now()): TeamMember[] {
+  return [
+    { id: "t1", name: "Priya Sharma", email: "priya@nurseathome.in", role: "owner", active: true, addedAt: nowMs - 120 * DAY },
+    { id: "t2", name: "Ravi Teja", email: "ravi@nurseathome.in", role: "verification", active: true, addedAt: nowMs - 90 * DAY },
+    { id: "t3", name: "Sana Khan", email: "sana@nurseathome.in", role: "support", active: true, addedAt: nowMs - 60 * DAY },
+    { id: "t4", name: "Kiran Rao", email: "kiran@nurseathome.in", role: "finance", active: true, addedAt: nowMs - 45 * DAY },
+  ];
+}
 
 export const DAY = 86400000;
 const HOUR = 3600000;
@@ -20,8 +56,12 @@ const HOUR = 3600000;
 /* ---------- Small helpers ---------- */
 
 export const money = (n: number) => (n < 0 ? "−₹" : "₹") + Math.abs(Math.round(n)).toLocaleString("en-IN");
-export const cityName = (id: string) => CITIES.find((c) => c.id === id)?.name ?? id;
-export const serviceName = (id: string) => SERVICES.find((s) => s.id === id)?.name ?? id;
+// Cities added in Settings are not in the built-in list, so the store tells this module their names.
+const extraCities: Record<string, string> = {};
+export const setCityNames = (list: { id: string; name: string }[]) => { for (const c of list) extraCities[c.id] = c.name; };
+export const cityName = (id: string) => CITIES.find((c) => c.id === id)?.name ?? extraCities[id] ?? id;
+// Looks in the catalog too, so services switched off (or added) in Settings keep their names.
+export const serviceName = (id: string) => SERVICE_CATALOG.find((s) => s.id === id)?.name ?? SERVICES.find((s) => s.id === id)?.name ?? id;
 export const startOfToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
 
 /** "YYYY-MM", a number of months from now. */
@@ -116,10 +156,11 @@ export function sampleCertificate(name: string, course: string, regNo: string) {
 
 /* ---------- Settings (what the admin can change) ---------- */
 
-export type CitySetting = { id: string; name: string; state: string; language: string; open: boolean };
+export type CitySetting = { id: string; name: string; state: string; language: string; open: boolean; areas: string[] };
 
 export type Settings = {
-  prices: Record<string, number>; // service id -> price (vitals is the total of the checks chosen)
+  services: ServiceSetting[]; // prices, on/off, nurse-only, prescription, and services added here
+  prices?: Record<string, number>; // saved by 1.0.6 and 1.0.7 only; turned into services when loaded
   checks: Record<string, number>; // vitals check id -> price
   visitFee: number;
   urgentFee: number;
@@ -138,7 +179,7 @@ export type Settings = {
 };
 
 export const DEFAULT_SETTINGS: Settings = {
-  prices: { ...DEFAULT_SERVICE_PRICES },
+  services: servicesFromPrices(DEFAULT_SERVICE_PRICES),
   checks: { ...DEFAULT_CHECK_PRICES },
   visitFee: VISIT_FEE,
   urgentFee: URGENT_FEE,
@@ -153,7 +194,7 @@ export const DEFAULT_SETTINGS: Settings = {
   offerMinutes: OFFER_MINUTES,
   offerMinutesUrgent: OFFER_MINUTES_URGENT,
   renewalWarnDays: RENEWAL_WARN_DAYS,
-  cities: CITIES.map((c) => ({ id: c.id, name: c.name, state: c.state, language: c.language, open: true })),
+  cities: CITIES.map((c) => ({ id: c.id, name: c.name, state: c.state, language: c.language, open: true, areas: [...(AREAS[c.id] ?? [])] })),
 };
 
 export const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -321,6 +362,7 @@ export type AdminBooking = {
   vitalIds: string[];
   patient: { name: string; age: number; gender: "F" | "M"; phone: string; forWhom: string };
   bookedBy: string;
+  accountId: string;
   cityId: string;
   area: string;
   at: number; // visit time
@@ -339,13 +381,49 @@ export type AdminBooking = {
   hasPrescription: boolean;
 };
 
-const PATIENTS: [string, "F" | "M"][] = [
-  ["Kamala Rao", "F"], ["Venkat Reddy", "M"], ["Shanthi Iyer", "F"], ["Gopal Krishnan", "M"], ["Meera Kulkarni", "F"],
-  ["Abdul Rahman", "M"], ["Lalitha Menon", "F"], ["Suresh Pillai", "M"], ["Parvati Hegde", "F"], ["Ramesh Naidu", "M"],
-  ["Anitha Joseph", "F"], ["Vijay Deshmukh", "M"], ["Saroja Murthy", "F"], ["Harish Shetty", "M"], ["Nirmala George", "F"],
-  ["Prakash Jain", "M"], ["Usha Varma", "F"], ["Mahesh Babu K", "M"], ["Fathima Beevi", "F"], ["Narayan Swamy", "M"],
+/* ---------- Patient accounts (sample) ---------- */
+
+export type FamilyMember = { name: string; relation: string; age: number; gender: "F" | "M" };
+export type PatientAccount = {
+  id: string;
+  live?: boolean; // from the patient app in this browser
+  name: string;
+  phone: string;
+  cityId: string;
+  joinedAt: number;
+  family: FamilyMember[]; // the first one is the account holder ("Self")
+  addresses: { label: string; line: string; area: string; cityId: string; pincode: string }[];
+  dues: number; // unpaid home visit charge from a cash booking, collected with the next booking
+  contact: string | null; // emergency contact
+};
+
+type AccountSeed = [id: string, name: string, gender: "F" | "M", age: number, cityId: string, area: string, pincode: string, family: [string, string, number, "F" | "M"][]];
+const ACCOUNT_SEEDS: AccountSeed[] = [
+  ["p1", "Kamala Rao", "F", 68, "hyd", "Kondapur", "500084", [["Srinivas Rao", "Husband", 72, "M"]]],
+  ["p2", "Venkat Reddy", "M", 45, "hyd", "Kukatpally", "500072", [["Lakshmamma", "Mother", 74, "F"], ["Narsimha Reddy", "Father", 79, "M"]]],
+  ["p3", "Abdul Rahman", "M", 38, "hyd", "Banjara Hills", "500034", [["Ayesha Begum", "Wife", 34, "F"], ["Abdul Rahim", "Father", 70, "M"]]],
+  ["p4", "Usha Varma", "F", 52, "hyd", "Madhapur", "500081", [["Savitri Varma", "Mother", 81, "F"]]],
+  ["p5", "Ramesh Naidu", "M", 61, "hyd", "Gachibowli", "500032", [["Padma Naidu", "Wife", 58, "F"]]],
+  ["p6", "Parvati Hegde", "F", 40, "blr", "Jayanagar", "560041", [["Ganesh Hegde", "Father", 76, "M"]]],
+  ["p7", "Harish Shetty", "M", 35, "blr", "Koramangala", "560034", [["Rukmini Shetty", "Grandmother", 88, "F"]]],
+  ["p8", "Saroja Murthy", "F", 66, "blr", "Malleswaram", "560003", []],
+  ["p9", "Meera Kulkarni", "F", 47, "bom", "Andheri West", "400058", [["Sudha Kulkarni", "Mother", 77, "F"]]],
+  ["p10", "Vijay Deshmukh", "M", 50, "bom", "Dadar", "400014", [["Anant Deshmukh", "Father", 82, "M"]]],
+  ["p11", "Shanthi Iyer", "F", 58, "maa", "Mylapore", "600004", [["Raman Iyer", "Husband", 63, "M"]]],
+  ["p12", "Gopal Krishnan", "M", 42, "maa", "Anna Nagar", "600040", [["Kamakshi Krishnan", "Mother", 71, "F"]]],
+  ["p13", "Lalitha Menon", "F", 60, "trv", "Kowdiar", "695003", [["Suresh Menon", "Husband", 65, "M"]]],
+  ["p14", "Nirmala George", "F", 44, "trv", "Pattom", "695004", [["Thomas George", "Father", 80, "M"]]],
 ];
-const FOR_WHOM = ["Self", "Mother", "Father", "Grandmother", "Grandfather", "Wife", "Husband"];
+
+export function sampleAccounts(nowMs = Date.now()): PatientAccount[] {
+  return ACCOUNT_SEEDS.map(([id, name, gender, age, cityId, area, pincode, family], i) => ({
+    id, name, phone: `98${String(48000000 + i * 1371937).slice(0, 8)}`, cityId, joinedAt: nowMs - (20 + i * 9) * DAY,
+    family: [{ name, relation: "Self", age, gender }, ...family.map(([n, relation, a, g]) => ({ name: n, relation, age: a, gender: g }))],
+    addresses: [{ label: "Home", line: `House ${12 + i * 7}, ${["2nd Main Road", "Temple Street", "Lake View Enclave", "Gandhi Nagar, 1st Lane"][i % 4]}`, area, cityId, pincode }],
+    dues: id === "p3" ? 49 : 0,
+    contact: family[0] ? `${family[0][0]} (${family[0][1].toLowerCase()})` : null,
+  }));
+}
 const CASH_HEAVY = ["c4", "m9"];
 const SLOT_HOURS: Record<string, number> = { "6:00 AM": 6, "9:00 AM": 9, "12:00 PM": 12, "4:00 PM": 16, "7:00 PM": 19, "10:00 PM": 22 };
 const PATIENT_CANCEL = ["The patient is feeling better", "The doctor changed the treatment", "I need a different day or time", "Booked by mistake"];
@@ -369,7 +447,10 @@ export function sampleBookings(members: Member[], nowMs = Date.now()): AdminBook
       const urgent = rnd() < 0.12 && day >= -6;
       const slot = pick(SLOTS);
       const at = urgent ? today + day * DAY + (8 + Math.floor(rnd() * 12)) * HOUR + Math.floor(rnd() * 4) * 15 * 60000 : today + day * DAY + SLOT_HOURS[slot] * HOUR;
-      const [name, gender] = pick(PATIENTS);
+      const accounts = sampleAccounts(nowMs).filter((a) => a.cityId === cityId);
+      const account = pick(accounts);
+      const member = pick(account.family);
+      rnd(); rnd(); // keeps the rest of the sample the same as before patient accounts were added
       const vitalIds = serviceId === "vitals" ? VITAL_CHECKS.filter(() => rnd() < 0.5).map((c) => c.id) : [];
       if (serviceId === "vitals" && vitalIds.length === 0) vitalIds.push("bp", "sugar");
       const servicePrice = serviceId === "vitals" ? vitalIds.reduce((s, id) => s + DEFAULT_CHECK_PRICES[id], 0) : DEFAULT_SERVICE_PRICES[serviceId];
@@ -384,8 +465,9 @@ export function sampleBookings(members: Member[], nowMs = Date.now()): AdminBook
         id: `NH-${n++}`,
         serviceId,
         vitalIds,
-        patient: { name, age: 24 + Math.floor(rnd() * 60), gender, phone: `98${Math.floor(10000000 + rnd() * 89999999)}`, forWhom: pick(FOR_WHOM) },
-        bookedBy: name,
+        patient: { name: member.name, age: member.age, gender: member.gender, phone: account.phone, forWhom: member.relation },
+        bookedBy: account.name,
+        accountId: account.id,
         cityId,
         area: pick(AREAS[cityId]),
         at,
@@ -480,7 +562,7 @@ export function sampleTickets(bookings: AdminBooking[], nowMs = Date.now()): Adm
     t({ id: "T-2047", from: "patient", name: b(1)?.bookedBy ?? "Kamala Rao", phone: b(1)?.patient.phone ?? "", topic: "Problem after a visit", message: "The wound looks redder and is painful since yesterday's dressing. Should we see a doctor?", bookingId: b(1)?.id ?? null, at: nowMs - 40 * 60000, urgent: true }),
     t({ id: "T-2045", from: "caregiver", name: "Pooja Patil", phone: "9876500088", topic: "A patient behaved badly", message: "A family member shouted at me and refused to let me leave until I gave a second injection without a prescription.", bookingId: null, at: nowMs - 2 * HOUR, urgent: true }),
     t({ id: "T-2044", from: "patient", name: b(4)?.bookedBy ?? "Venkat Reddy", phone: b(4)?.patient.phone ?? "", topic: "Behaviour of the caregiver", message: "The nurse did not wear gloves and was in a hurry. Not happy with the visit.", bookingId: b(4)?.id ?? null, at: nowMs - 5 * HOUR, urgent: true }),
-    t({ id: "T-2046", from: "patient", name: "Usha Varma", phone: "9845098450", topic: "App problem", message: "The prescription photo upload keeps saying the photo is too small to read.", bookingId: null, at: nowMs - 9 * HOUR, urgent: false }),
+    t({ id: "T-2046", from: "patient", name: "Usha Varma", phone: sampleAccounts(nowMs).find((a) => a.id === "p4")?.phone ?? "", topic: "App problem", message: "The prescription photo upload keeps saying the photo is too small to read.", bookingId: null, at: nowMs - 9 * HOUR, urgent: false }),
     t({ id: "T-2043", from: "caregiver", name: "Ravi Kumar", phone: "9876500044", topic: "Payment or payout", message: "Last Monday's payout was ₹420 less than my earnings screen showed.", bookingId: null, at: nowMs - 22 * HOUR, urgent: false }),
     t({ id: "T-2042", from: "patient", name: b(6)?.bookedBy ?? "Shanthi Iyer", phone: b(6)?.patient.phone ?? "", topic: "Payment", message: "Charged twice for one visit. Please check.", bookingId: b(6)?.id ?? null, at: nowMs - 41 * HOUR, urgent: false }),
     t({ id: "T-2041", from: "patient", name: b(9)?.bookedBy ?? "Gopal Krishnan", phone: b(9)?.patient.phone ?? "", topic: "Caregiver was late", message: "The caregiver came 40 minutes late and did not call.", bookingId: b(9)?.id ?? null, at: nowMs - 3 * DAY, urgent: false }),
@@ -496,4 +578,105 @@ export function samplePastPayouts(members: Member[], nowMs = Date.now()) {
     const rows = members.filter((m) => !m.live).map((m) => ({ memberId: m.id, amount: 1200 + Math.round(rnd() * 3200), reference: `UTR ${4100 + w}${Math.floor(1000 + rnd() * 8999)} ${Math.floor(1000 + rnd() * 8999)}` }));
     return { monday, paidOn: monday + 7 * DAY + 10 * HOUR, rows, total: rows.reduce((s, r) => s + r.amount, 0) };
   });
+}
+
+/* ---------- Caregiver history (sample past events) ---------- */
+
+export type HistoryKind =
+  | "documents" | "sent-back" | "approved" | "tier" | "paused" | "reinstated"
+  | "renewal-sent" | "renewal-approved" | "renewal-refused" | "reminder";
+export type HistoryEvent = { at: number; kind: HistoryKind; text: string; by?: string };
+export const HISTORY_TEXT: Record<HistoryKind, string> = {
+  documents: "Documents sent",
+  "sent-back": "Document sent back",
+  approved: "Approved",
+  tier: "Services changed",
+  paused: "Paused",
+  reinstated: "Reinstated",
+  "renewal-sent": "Renewal sent",
+  "renewal-approved": "Renewal approved",
+  "renewal-refused": "Renewal sent back",
+  reminder: "Renewal reminder sent",
+};
+
+export function sampleHistory(m: Member, nowMs = Date.now()): HistoryEvent[] {
+  if (m.live) return [];
+  const j = m.joinedAt;
+  const nurse = m.role === "nurse";
+  const ev: HistoryEvent[] = [{ at: j - 3 * DAY, kind: "documents", text: nurse ? "ID, selfie, registration certificate and bank account" : "ID, selfie, training certificate and bank account" }];
+  if (m.id === "c3") ev.push({ at: j - 2 * DAY, kind: "sent-back", text: "Qualification: The certificate photo is not readable. Take it again so all the text is clear.", by: "Ravi Teja" }, { at: j - 1 * DAY, kind: "documents", text: "Certificate sent again" });
+  if (m.id === "m7") {
+    ev.push({ at: j, kind: "approved", text: "Dressing and vitals only, for now (registration being confirmed)", by: "Ravi Teja" });
+    ev.push({ at: j + 20 * DAY, kind: "tier", text: "All nurse services (council registration confirmed)", by: "Ravi Teja" });
+  } else {
+    ev.push({ at: j, kind: "approved", text: nurse ? "All nurse services" : "Dressing and vitals", by: "Ravi Teja" });
+  }
+  if (m.id === "m6") ev.push({ at: nowMs - 40 * DAY, kind: "paused", text: "Three cancelled visits in one week.", by: "Ravi Teja" }, { at: nowMs - 37 * DAY, kind: "reinstated", text: "Called him; agreed to set his working hours correctly.", by: "Ravi Teja" });
+  if (m.id === "c4") ev.push({ at: nowMs - 70 * DAY, kind: "paused", text: "A complaint about a visit is being looked into.", by: "Sana Khan" }, { at: nowMs - 68 * DAY, kind: "reinstated", text: "Complaint checked: the dressing was done correctly.", by: "Sana Khan" });
+  if (m.id === "m5") ev.push({ at: nowMs - 2 * DAY, kind: "renewal-sent", text: "Renewed registration certificate" });
+  if (m.id === "m11") ev.push({ at: nowMs - 20 * DAY, kind: "reminder", text: "Registration expires soon", by: "Ravi Teja" }, { at: nowMs - 3 * HOUR, kind: "renewal-sent", text: "Renewed registration certificate" });
+  return ev;
+}
+
+/** Sample document pictures for a caregiver who is already working. */
+export function sampleDocs(m: Member) {
+  const seed = Number(m.id.replace(/\D/g, "")) || 0;
+  return {
+    id: sampleIdPhoto(m.name, String(1000 + ((seed * 2731) % 9000)).slice(-4)),
+    selfie: sampleSelfie(seed),
+    certificate: sampleCertificate(m.name, m.course, m.regNo),
+  };
+}
+
+/* ---------- Reports ---------- */
+
+export type MonthReport = {
+  key: string; // "YYYY-MM"
+  label: string;
+  partial: boolean; // the month is not over yet
+  visits: number;
+  gross: number; // what patients paid
+  caregiverPay: number;
+  platform: number; // what we kept, before refunds
+  refunds: number;
+  byCity: { cityId: string; visits: number; gross: number; platform: number }[];
+  byService: { serviceId: string; visits: number; gross: number }[];
+  byCaregiver: { id: string; name: string; cityId: string; visits: number; earned: number; cash: number }[];
+};
+
+export const monthKeyOf = (ms: number) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
+export const monthLabelOf = (key: string) => { const [y, m] = key.split("-").map(Number); return `${["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][m - 1]} ${y}`; };
+
+const SERVICE_MIX: [string, number, number][] = [["inj", 0.3, 299], ["dress", 0.2, 349], ["vitals", 0.18, 199], ["iv", 0.1, 649], ["elder", 0.12, 399], ["med", 0.1, 249]];
+
+/** A sample report for an earlier month (the sample bookings only cover the last 7 days). */
+export function pastMonthReport(monthsAgo: number, members: Member[], s: Settings, nowMs = Date.now()): MonthReport {
+  const rnd = seeded(500 + monthsAgo);
+  const d = new Date(nowMs); d.setDate(1); d.setMonth(d.getMonth() - monthsAgo);
+  const key = monthKeyOf(d.getTime());
+  const team = members.filter((m) => !m.live && m.joinedAt < d.getTime() + 28 * DAY);
+  const total = Math.round(330 * Math.pow(0.86, monthsAgo - 1) * (0.95 + rnd() * 0.1));
+  const byService = SERVICE_MIX.map(([serviceId, share, avg]) => { const visits = Math.round(total * share); return { serviceId, visits, gross: visits * avg }; });
+  const visits = byService.reduce((a, x) => a + x.visits, 0);
+  const gross = byService.reduce((a, x) => a + x.gross, 0);
+  const caregiverPay = Math.round((gross - visits * s.visitFee) * (s.caregiverShare / 100) + visits * s.visitFee * (s.visitFeeShare / 100));
+  const weight = team.reduce((a, m) => a + m.visits, 0) || 1;
+  const byCaregiver = team.map((m) => {
+    const v = Math.round((visits * m.visits) / weight);
+    return { id: m.id, name: m.name, cityId: m.cityId, visits: v, earned: Math.round((caregiverPay * v) / Math.max(visits, 1)), cash: Math.round(v * 0.3 * (gross / Math.max(visits, 1))) };
+  });
+  const byCity = s.cities.map((c) => {
+    const v = byCaregiver.filter((x) => x.cityId === c.id).reduce((a, x) => a + x.visits, 0);
+    const g = Math.round((gross * v) / Math.max(visits, 1));
+    return { cityId: c.id, visits: v, gross: g, platform: Math.round(g * (1 - caregiverPay / Math.max(gross, 1))) };
+  });
+  return { key, label: monthLabelOf(key), partial: false, visits, gross, caregiverPay, platform: gross - caregiverPay, refunds: Math.round(gross * (0.015 + rnd() * 0.01)), byCity, byService, byCaregiver };
+}
+
+/** GST on what we keep (PLACEHOLDER rate and treatment: confirm with a chartered accountant). */
+export const GST_RATE = 18;
+export function gstOn(platformIncome: number) {
+  const taxable = Math.round((platformIncome * 100) / (100 + GST_RATE));
+  const gst = platformIncome - taxable;
+  return { taxable, gst, cgst: Math.round(gst / 2), sgst: gst - Math.round(gst / 2) };
 }

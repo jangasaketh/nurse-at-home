@@ -4,7 +4,7 @@
 
 import { useAdmin } from "@/lib/admin/store";
 import { SERVICES } from "@/lib/data";
-import { DAY, ago, daysUntilMonthEnd, isPaidOut, money, moneyFor, mondayOf, startOfToday, type AdminPage } from "@/lib/admin/data";
+import { canOpen, DAY, ago, daysUntilMonthEnd, isPaidOut, money, moneyFor, mondayOf, startOfToday, type AdminPage } from "@/lib/admin/data";
 import { cashOwedRows } from "./PayoutsPage";
 import { Badge, Meter, PageHead, Stat } from "./ui";
 
@@ -42,6 +42,10 @@ export function DashboardPage() {
   if (openTickets.length - urgentTickets.length > 0) todo.push({ text: `${openTickets.length - urgentTickets.length} other open support tickets`, sub: "Payments, app problems and late visits.", page: "support", tone: "info" });
   if (expiring.length) todo.push({ text: `${expiring.length} ${expiring.length === 1 ? "nurse's registration expires" : "nurses' registrations expire"} soon`, sub: `Within ${s.renewalWarnDays} days, or already lapsed, and no renewal sent.`, page: "verification", tone: "info" });
   if (owed.length) todo.push({ text: `${owed.length} ${owed.length === 1 ? "caregiver owes" : "caregivers owe"} cash`, sub: "They collected more cash this week than they earned.", page: "payouts", tone: "info" });
+
+  // Each team member sees only what their role can act on.
+  const mine = todo.filter((item) => canOpen(state.role, item.page));
+  todo.splice(0, todo.length, ...mine);
 
   // Last 7 days
   const days = Array.from({ length: 7 }, (_, i) => today - (6 - i) * DAY);

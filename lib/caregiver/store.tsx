@@ -78,7 +78,7 @@ export type VisitRecord = {
 /** An in-app notification. Titles and bodies are messages, so they follow the app language. */
 export type CgNotice = {
   id: string;
-  kind: "request" | "cancelled" | "payout" | "document" | "rating" | "verified" | "expired" | "support";
+  kind: "request" | "cancelled" | "payout" | "document" | "rating" | "verified" | "expired" | "support" | "message";
   title: Msg;
   body: Msg;
   at: number;

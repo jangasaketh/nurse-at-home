@@ -5,8 +5,10 @@
 import { useState } from "react";
 import { useAdmin, type MemberRow } from "@/lib/admin/store";
 import * as link from "@/lib/admin/link";
-import { ago, cityName, dateOnly, dateTime, daysUntilMonthEnd, monthText, serviceName, STATUS_TEXT, TIER_TEXT, type Tier } from "@/lib/admin/data";
-import { Badge, Drawer, Empty, Field, LiveBadge, PageHead, Select, useToast } from "./ui";
+import {
+  ago, cityName, dateOnly, dateTime, daysUntilMonthEnd, HISTORY_TEXT, monthText, sampleDocs, serviceName, STATUS_TEXT, TIER_TEXT, type HistoryKind, type Tier,
+} from "@/lib/admin/data";
+import { Badge, Doc, Drawer, Empty, Field, LiveBadge, PageHead, Select, useToast, type Tone } from "./ui";
 
 export const SUSPEND_REASONS = [
   "A complaint about a visit is being looked into.",
@@ -81,7 +83,7 @@ export function CaregiversPage() {
 }
 
 function MemberDrawer({ m, onClose }: { m: MemberRow; onClose: () => void }) {
-  const { view, update, log, refreshCg, nowMs, state } = useAdmin();
+  const { view, update, log, addHistory, refreshCg, nowMs, state } = useAdmin();
   const toast = useToast();
   const [mode, setMode] = useState<"suspend" | "tier" | null>(null);
   const [reason, setReason] = useState(SUSPEND_REASONS[0]);
@@ -99,6 +101,7 @@ function MemberDrawer({ m, onClose }: { m: MemberRow; onClose: () => void }) {
     if (finalReason.length < 10) return;
     if (m.live) link.suspendLive(finalReason); else edit({ suspended: { reason: finalReason, at: Date.now() } });
     log(`Paused ${m.name}: “${finalReason}”`, "caregivers");
+    addHistory(m.id, "paused", finalReason);
     refreshCg();
     toast(`${m.name} is paused and gets no requests`);
     setMode(null);
@@ -106,12 +109,14 @@ function MemberDrawer({ m, onClose }: { m: MemberRow; onClose: () => void }) {
   const reinstate = () => {
     if (m.live) link.reinstateLive(); else edit({ suspended: null });
     log(`Reinstated ${m.name}`, "caregivers");
+    addHistory(m.id, "reinstated", "Can take requests again");
     refreshCg();
     toast(`${m.name} is active again`);
   };
   const saveTier = () => {
     if (m.live) link.setTierLive(tier); else edit({ tier });
     log(`Changed what ${m.name} can take: ${TIER_TEXT[tier].toLowerCase()}`, "caregivers");
+    addHistory(m.id, "tier", TIER_TEXT[tier]);
     refreshCg();
     toast("Saved");
     setMode(null);
@@ -178,6 +183,9 @@ function MemberDrawer({ m, onClose }: { m: MemberRow; onClose: () => void }) {
         </section>
       )}
 
+      <MemberDocs m={m} />
+      <MemberHistory id={m.id} />
+
       <section className="adm-col">
         <h3>Recent bookings</h3>
         {recent.length === 0 ? <p className="adm-muted adm-small">{m.live ? "Visits from the caregiver app are sample requests and are not listed here." : "No bookings yet."}</p> : (
@@ -191,5 +199,70 @@ function MemberDrawer({ m, onClose }: { m: MemberRow; onClose: () => void }) {
         )}
       </section>
     </Drawer>
+  );
+}
+
+/* ---------- Documents on file and history ---------- */
+
+function MemberDocs({ m }: { m: MemberRow }) {
+  const { cg, view } = useAdmin();
+  const applicant = view.applicants.find((a) => a.id === m.id && !a.live);
+  const docs = m.live
+    ? { id: cg?.idProof?.photo ?? null, selfie: cg?.selfie ?? null, certificate: cg?.qualification?.certificate ?? null, renewal: cg?.renewal?.certificate ?? null }
+    : applicant
+      ? { id: applicant.idPhoto, selfie: applicant.selfie, certificate: applicant.certificate, renewal: null }
+      : { ...sampleDocs(m), renewal: view.renewals.find((r) => r.memberId === m.id && !r.decision)?.certificate ?? null };
+  return (
+    <section className="adm-col">
+      <h3>Documents on file</h3>
+      <div className="adocs">
+        <Doc file={docs.id} label="Government ID" />
+        <Doc file={docs.selfie} label="Selfie" />
+        <Doc file={docs.certificate} label={m.role === "nurse" ? "Registration certificate" : "Training certificate"} />
+        {docs.renewal && <Doc file={docs.renewal} label="Renewed certificate (waiting)" />}
+      </div>
+    </section>
+  );
+}
+
+const HISTORY_TONE: Record<HistoryKind, Tone> = {
+  documents: "info", "sent-back": "warn", approved: "ok", tier: "info", paused: "danger", reinstated: "ok",
+  "renewal-sent": "info", "renewal-approved": "ok", "renewal-refused": "warn", reminder: "muted",
+};
+type HistoryFilter = "all" | "documents" | "sent-back" | "paused";
+const FILTER_KINDS: Record<HistoryFilter, HistoryKind[] | null> = {
+  all: null,
+  documents: ["documents", "renewal-sent", "renewal-approved", "renewal-refused", "reminder"],
+  "sent-back": ["sent-back", "renewal-refused"],
+  paused: ["paused", "reinstated"],
+};
+
+function MemberHistory({ id }: { id: string }) {
+  const { view } = useAdmin();
+  const [filter, setFilter] = useState<HistoryFilter>("all");
+  const all = view.historyOf(id);
+  const list = all.filter((e) => !FILTER_KINDS[filter] || FILTER_KINDS[filter]!.includes(e.kind));
+  const n = (f: HistoryFilter) => all.filter((e) => !FILTER_KINDS[f] || FILTER_KINDS[f]!.includes(e.kind)).length;
+  return (
+    <section className="adm-col">
+      <div className="acard-head">
+        <h3>History</h3>
+        <div className="adm-row" role="group" aria-label="Show in history" style={{ gap: 6 }}>
+          {([["all", "Everything"], ["documents", "Documents"], ["sent-back", "Send-backs"], ["paused", "Pauses"]] as [HistoryFilter, string][]).map(([f, label]) => (
+            <button key={f} type="button" className={`abtn abtn-sm ${filter === f ? "abtn-primary" : ""}`} aria-pressed={filter === f} onClick={() => setFilter(f)}>{label} ({n(f)})</button>
+          ))}
+        </div>
+      </div>
+      {list.length === 0 ? <p className="adm-small adm-muted">Nothing of this kind yet.</p> : (
+        <div className="atimeline" data-testid="history">
+          {list.map((e, i) => (
+            <div key={i} className="adm-col" style={{ gap: 2 }}>
+              <span className="adm-row" style={{ gap: 8 }}><Badge tone={HISTORY_TONE[e.kind]}>{HISTORY_TEXT[e.kind]}</Badge><span className="adm-small adm-muted">{dateTime(e.at)}{e.by ? ` · ${e.by}` : ""}</span></span>
+              <span className="adm-small">{e.text}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

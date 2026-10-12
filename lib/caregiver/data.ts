@@ -3,7 +3,7 @@
 // visits and earnings come from the API instead.
 // Text is in English and translated on screen with t() (lib/i18n.ts). Place names and people's names are not translated.
 
-import { CITIES, SERVICES, SLOTS, URGENT_FEE, URGENT_SLOT, VISIT_FEE, VITAL_CHECKS } from "@/lib/data";
+import { CITIES, SERVICE_CATALOG, SERVICES, SLOTS, URGENT_FEE, URGENT_SLOT, VISIT_FEE, VITAL_CHECKS } from "@/lib/data";
 
 /* ---------- Pay (PLACEHOLDERS: the owner must set these) ---------- */
 // What the caregiver earns from each visit. Everything else the patient pays stays with the platform.
@@ -110,7 +110,7 @@ export function sampleJobs(cityId: string): Job[] {
 }
 
 /* ---------- Money ---------- */
-export const serviceOf = (job: Job) => SERVICES.find((s) => s.id === job.serviceId) ?? SERVICES[0];
+export const serviceOf = (job: Job) => SERVICES.find((s) => s.id === job.serviceId) ?? SERVICE_CATALOG.find((s) => s.id === job.serviceId) ?? SERVICES[0];
 export const checksOf = (job: Job) => VITAL_CHECKS.filter((v) => job.vitalIds.includes(v.id));
 export const isUrgent = (job: Job) => job.slot === URGENT_SLOT;
 

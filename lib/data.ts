@@ -337,28 +337,79 @@ export const LEGAL = {
   },
 };
 
-/* ---------- Prices set in the admin panel ---------- */
-// PROTOTYPE: the admin panel (/admin/) saves its settings in this browser. Service and vitals-check prices
-// set there are applied here, when the app opens, so a price change shows in the patient and caregiver apps.
-// When the backend exists, prices come from the API instead and this block is removed.
+/* ---------- Services and prices set in the admin panel ---------- */
+// PROTOTYPE: the admin panel (/admin/) saves its settings in this browser. The services list (prices, switched
+// off services, nurse-only and prescription settings, new services) and vitals-check prices set there are applied
+// here, when the app opens, so the change shows in the patient and caregiver apps.
+// When the backend exists, services and prices come from the API instead and this block is removed.
 export const ADMIN_STORAGE_KEY = "nurse-at-home-admin:v1";
 export const DEFAULT_SERVICE_PRICES: Record<string, number> = Object.fromEntries(SERVICES.map((s) => [s.id, s.price]));
 export const DEFAULT_CHECK_PRICES: Record<string, number> = Object.fromEntries(VITAL_CHECKS.map((c) => [c.id, c.price]));
+/** The built-in services as shipped, before any admin change. */
+export const BUILT_IN_SERVICES: Service[] = SERVICES.map((s) => ({ ...s, includes: [...s.includes] }));
+/** Every service ever offered, including switched-off and admin-added ones, so old bookings still show the right name. */
+export const SERVICE_CATALOG: Service[] = [...BUILT_IN_SERVICES];
+/** Injections, drips and medication: always nurse-only and always need a prescription (the two rules in the plan). */
+export const LOCKED_SERVICE_IDS = ["inj", "iv", "med"];
 
-export function applyPrices(prices?: Record<string, number>, checks?: Record<string, number>) {
-  const ok = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n > 0;
-  for (const s of SERVICES) if (s.id !== VITALS_SERVICE_ID) s.price = ok(prices?.[s.id]) ? prices[s.id] : DEFAULT_SERVICE_PRICES[s.id];
-  for (const c of VITAL_CHECKS) c.price = ok(checks?.[c.id]) ? checks[c.id] : DEFAULT_CHECK_PRICES[c.id];
+/** A service as the admin panel saves it. */
+export type ServiceSetting = {
+  id: string;
+  name: string;
+  short: string;
+  price: number;
+  mins: string;
+  nurseOnly: boolean;
+  needsPrescription: boolean;
+  active: boolean;
+  custom: boolean; // added in the admin panel
+  icon: IconName;
+  nurseBrings: string;
+  youKeepReady: string;
+  includes: string[];
+};
+
+const okPrice = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n > 0;
+
+export function applyServices(list?: ServiceSetting[] | null, checks?: Record<string, number>) {
+  for (const c of VITAL_CHECKS) c.price = okPrice(checks?.[c.id]) ? checks[c.id] : DEFAULT_CHECK_PRICES[c.id];
+  const next: Service[] = [];
+  const rows = list && list.length ? list : BUILT_IN_SERVICES.map((s) => ({ ...s, active: true, custom: false }) as ServiceSetting);
+  for (const row of rows) {
+    const base = BUILT_IN_SERVICES.find((s) => s.id === row.id);
+    const locked = LOCKED_SERVICE_IDS.includes(row.id);
+    const svc: Service = base
+      ? { ...base, includes: [...base.includes], price: okPrice(row.price) ? row.price : base.price, nurseOnly: locked ? true : row.nurseOnly, needsPrescription: locked ? true : row.needsPrescription }
+      : {
+          id: row.id, name: row.name, short: row.short, price: okPrice(row.price) ? row.price : 100, mins: row.mins || "30 minutes",
+          needsPrescription: row.needsPrescription, nurseOnly: row.nurseOnly, icon: row.icon, nurseBrings: row.nurseBrings || "What is needed for the visit",
+          youKeepReady: row.youKeepReady || "Nothing special", includes: row.includes.length ? row.includes : [row.short], note: "Visit done as booked.",
+        };
+    const known = SERVICE_CATALOG.findIndex((s) => s.id === svc.id);
+    if (known >= 0) SERVICE_CATALOG[known] = svc; else SERVICE_CATALOG.push(svc);
+    if (row.active) next.push(svc);
+  }
+  if (next.length === 0) next.push(...BUILT_IN_SERVICES); // never leave the app with no services
+  SERVICES.splice(0, SERVICES.length, ...next);
   // The vitals "from" price is the cheapest check.
   const vitals = SERVICES.find((s) => s.id === VITALS_SERVICE_ID);
   if (vitals) vitals.price = Math.min(...VITAL_CHECKS.map((c) => c.price));
 }
 
+/** Settings saved by version 1.0.6 and 1.0.7 had only prices: turn them into a services list. */
+export function servicesFromPrices(prices?: Record<string, number>): ServiceSetting[] {
+  return BUILT_IN_SERVICES.map((s) => ({
+    id: s.id, name: s.name, short: s.short, price: okPrice(prices?.[s.id]) ? prices[s.id] : s.price, mins: s.mins, nurseOnly: s.nurseOnly,
+    needsPrescription: s.needsPrescription, active: true, custom: false, icon: s.icon, nurseBrings: s.nurseBrings, youKeepReady: s.youKeepReady, includes: [...s.includes],
+  }));
+}
+
 if (typeof window !== "undefined") {
   try {
     const saved = JSON.parse(window.localStorage.getItem(ADMIN_STORAGE_KEY) ?? "null");
-    if (saved?.settings) applyPrices(saved.settings.prices, saved.settings.checks);
+    const st = saved?.settings;
+    if (st) applyServices(st.services ?? servicesFromPrices(st.prices), st.checks);
   } catch {
-    // Storage blocked or unreadable: the built-in prices stay.
+    // Storage blocked or unreadable: the built-in services stay.
   }
 }

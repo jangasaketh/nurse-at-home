@@ -176,12 +176,13 @@ export function VerificationPage() {
 /* ---------- Sent back: the sample caregiver sends the document again ---------- */
 
 function ResendButton({ id, name }: { id: string; name: string }) {
-  const { update, log } = useAdmin();
+  const { update, log, addHistory } = useAdmin();
   const toast = useToast();
   return (
     <button type="button" className="abtn abtn-sm" onClick={() => {
       update((prev) => { const d = { ...prev.applicantDecisions }; delete d[id]; return { applicantDecisions: d }; });
       log(`${name} sent the document again (prototype)`, "verification");
+      addHistory(id, "documents", "Document sent again");
       toast(`${name} is back in the Waiting list`);
     }}>Prototype: they send it again</button>
   );
@@ -206,7 +207,7 @@ function autoChecks(a: ApplicantRow, nowMs: number) {
 }
 
 function ReviewDrawer({ a, onClose }: { a: ApplicantRow; onClose: () => void }) {
-  const { update, log, refreshCg, nowMs } = useAdmin();
+  const { update, log, addHistory, refreshCg, nowMs } = useAdmin();
   const toast = useToast();
   const [ticked, setTicked] = useState<Record<string, boolean>>({});
   const [mode, setMode] = useState<"approve" | "send-back" | null>(null);
@@ -227,6 +228,7 @@ function ReviewDrawer({ a, onClose }: { a: ApplicantRow; onClose: () => void }) 
     if (a.live && !link.approveLive(t)) { toast("The caregiver app data could not be changed. Is storage blocked?"); return; }
     update((prev) => ({ applicantDecisions: { ...prev.applicantDecisions, [a.id]: { status: "approved", tier: t, at: Date.now() } } }));
     log(`Approved ${a.name} (${roleText(a.role)}, ${TIER_TEXT[t].toLowerCase()})`, "verification");
+    addHistory(a.id, "approved", a.role === "compounder" ? "Dressing and vitals" : TIER_TEXT[t]);
     refreshCg();
     toast(`${a.name} is approved${a.live ? ". The caregiver app shows it now." : ""}`);
     onClose();
@@ -237,6 +239,7 @@ function ReviewDrawer({ a, onClose }: { a: ApplicantRow; onClose: () => void }) 
     if (a.live && !link.sendBackLive(step, finalReason)) { toast("The caregiver app data could not be changed. Is storage blocked?"); return; }
     update((prev) => ({ applicantDecisions: { ...prev.applicantDecisions, [a.id]: { status: "sent-back", step, reason: finalReason, at: Date.now() } } }));
     log(`Sent back ${a.name}'s ${STEP_NAMES[step].toLowerCase()}: “${finalReason}”`, "verification");
+    addHistory(a.id, "sent-back", `${STEP_NAMES[step]}: ${finalReason}`);
     refreshCg();
     toast(`Sent back to ${a.name}`);
     onClose();
@@ -354,7 +357,7 @@ function ReviewDrawer({ a, onClose }: { a: ApplicantRow; onClose: () => void }) 
 /* ---------- Renewed registration ---------- */
 
 function RenewalDrawer({ r, onClose }: { r: RenewalRow; onClose: () => void }) {
-  const { update, log, refreshCg, nowMs } = useAdmin();
+  const { update, log, addHistory, refreshCg, nowMs } = useAdmin();
   const toast = useToast();
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState(RENEWAL_REASONS[0]);
@@ -367,6 +370,7 @@ function RenewalDrawer({ r, onClose }: { r: RenewalRow; onClose: () => void }) {
       memberEdits: r.live ? prev.memberEdits : { ...prev.memberEdits, [r.memberId]: { ...prev.memberEdits[r.memberId], validUntil: r.validUntil } },
     }));
     log(`Approved ${name}'s renewed registration, valid until ${monthText(r.validUntil)}`, "verification");
+    addHistory(r.memberId, "renewal-approved", `Valid until ${monthText(r.validUntil)}`);
     refreshCg();
     toast(`${name}'s registration is renewed`);
     onClose();
@@ -375,6 +379,7 @@ function RenewalDrawer({ r, onClose }: { r: RenewalRow; onClose: () => void }) {
     if (r.live && !link.rejectRenewalLive(reason)) { toast("The caregiver app data could not be changed."); return; }
     update((prev) => ({ renewalDecisions: { ...prev.renewalDecisions, [r.id]: { status: "rejected", reason, at: Date.now() } } }));
     log(`Sent back ${name}'s renewal: “${reason}”`, "verification");
+    addHistory(r.memberId, "renewal-refused", reason);
     refreshCg();
     toast(`Renewal sent back to ${name}`);
     onClose();
@@ -408,12 +413,13 @@ function RenewalDrawer({ r, onClose }: { r: RenewalRow; onClose: () => void }) {
 /* ---------- Registrations about to lapse ---------- */
 
 function ExpiringList({ members }: { members: ReturnType<typeof useAdmin>["view"]["members"] }) {
-  const { state, update, log, refreshCg, nowMs } = useAdmin();
+  const { state, update, log, addHistory, refreshCg, nowMs } = useAdmin();
   const toast = useToast();
   const remind = (id: string, name: string, live?: boolean) => {
     if (live) link.remindRenewalLive();
     update((prev) => ({ reminders: { ...prev.reminders, [id]: Date.now() } }));
     log(`Sent a renewal reminder to ${name}`, "verification");
+    addHistory(id, "reminder", "Registration expires soon");
     refreshCg();
     toast(`Reminder sent to ${name}`);
   };

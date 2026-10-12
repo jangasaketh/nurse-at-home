@@ -94,14 +94,19 @@ export function Drawer({ title, sub, onClose, children, footer, narrow, label }:
   title: ReactNode; sub?: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode; narrow?: boolean; label: string;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
+  const backRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     closeRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !document.querySelector(".viewer")) onClose(); };
+    // Only the panel on top closes with Escape (a booking can open over a patient, for example).
+    const onKey = (e: KeyboardEvent) => {
+      const panels = document.querySelectorAll(".adrawer-back");
+      if (e.key === "Escape" && !document.querySelector(".viewer") && panels[panels.length - 1] === backRef.current) onClose();
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
   return (
-    <div className="adrawer-back" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div ref={backRef} className="adrawer-back" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <section className={`adrawer ${narrow ? "narrow" : ""}`} role="dialog" aria-modal="true" aria-label={label}>
         <div className="adrawer-head">
           <div className="grow">

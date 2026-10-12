@@ -2,7 +2,7 @@
 
 import {
   CAREGIVERS, CITIES, FREE_UNTIL_HOURS, GRACE_MINUTES, ROUTINE_CHECK_IDS, SERVICES, SLOTS, TIMED_CANCEL_RULE,
-  URGENT_FEE, URGENT_SLOT, VISIT_FEE, VITAL_CHECKS, VITALS_SERVICE_ID, type Caregiver, type City, type Service,
+  URGENT_FEE, URGENT_SLOT, VISIT_FEE, VITAL_CHECKS, VITALS_SERVICE_ID, type Caregiver, type City, type Service, SERVICE_CATALOG,
 } from "./data";
 import { getLang, t } from "./i18n";
 import type { Prescription } from "./prescription";
@@ -167,7 +167,8 @@ export type Draft = {
   vitalIds: string[]; // checks chosen for a vitals visit
 };
 
-export const serviceById = (id: string) => SERVICES.find((s) => s.id === id) ?? SERVICES[0];
+// Looks in the catalog too, so a booking for a service the admin has since switched off keeps its name.
+export const serviceById = (id: string) => SERVICES.find((s) => s.id === id) ?? SERVICE_CATALOG.find((s) => s.id === id) ?? SERVICES[0];
 
 /** A caregiver as shown to a patient in one city. */
 export type ListedCaregiver = Caregiver & { regLine: string };

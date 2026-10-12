@@ -8,7 +8,8 @@ import { dateTime, type AdminPage } from "@/lib/admin/data";
 import { Badge, Empty, PageHead, Select, csvRow, downloadText, useToast } from "./ui";
 
 const PAGE_NAMES: Partial<Record<AdminPage, string>> = {
-  verification: "Verification", caregivers: "Caregivers", bookings: "Bookings", refunds: "Refunds", support: "Support", payouts: "Payouts", settings: "Settings",
+  verification: "Verification", caregivers: "Caregivers", patients: "Patients", bookings: "Bookings", refunds: "Refunds", support: "Support", messages: "Messages",
+  payouts: "Payouts", reports: "Reports", settings: "Settings", team: "Team",
 };
 
 export function ActivityPage() {
@@ -19,7 +20,7 @@ export function ActivityPage() {
   const rows = state.activity.filter((a) => page === "all" || a.page === page);
 
   const download = () => {
-    downloadText("admin-activity.csv", [csvRow(["When", "Section", "What", "Who"]), ...state.activity.map((a) => csvRow([dateTime(a.at), PAGE_NAMES[a.page] ?? a.page, a.text, state.adminName]))].join("\r\n"));
+    downloadText("admin-activity.csv", [csvRow(["When", "Section", "What", "Who"]), ...state.activity.map((a) => csvRow([dateTime(a.at), PAGE_NAMES[a.page] ?? a.page, a.text, a.by ?? state.adminName]))].join("\r\n"));
   };
 
   return (
@@ -36,7 +37,7 @@ export function ActivityPage() {
               <thead><tr><th>When</th><th>Section</th><th>What</th><th>Who</th></tr></thead>
               <tbody>
                 {rows.map((a) => (
-                  <tr key={a.id}><td className="nowrap">{dateTime(a.at)}</td><td><Badge>{PAGE_NAMES[a.page] ?? a.page}</Badge></td><td>{a.text}</td><td className="nowrap">{state.adminName}</td></tr>
+                  <tr key={a.id}><td className="nowrap">{dateTime(a.at)}</td><td><Badge>{PAGE_NAMES[a.page] ?? a.page}</Badge></td><td>{a.text}</td><td className="nowrap">{a.by ?? state.adminName}</td></tr>
                 ))}
               </tbody>
             </table>

@@ -222,3 +222,8 @@ export function payLive(amount: number, reference: string) {
 export function setTicketStatusLive(id: string, status: "open" | "resolved") {
   return writeCg((s) => ({ tickets: (s.tickets ?? []).map((tk) => (tk.id === id ? { ...tk, status } : tk)) }));
 }
+
+/** A message from the team to caregivers (shown as written, in English). */
+export function messageLive(title: string, body: string) {
+  return writeCg((s) => ({ notices: withNotice(s, { kind: "message", title, body, to: "jobs" }) }));
+}

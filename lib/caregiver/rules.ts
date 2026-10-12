@@ -1,6 +1,6 @@
 // CAREGIVER APP RULES. No UI in this file.
 
-import { CITIES } from "@/lib/data";
+import { CITIES, SERVICES } from "@/lib/data";
 import { addDays, dayInfo, msg, todayISO, type Msg } from "@/lib/booking";
 import { t } from "@/lib/i18n";
 import { DAYS, isUrgent, OFFER_MINUTES, OFFER_MINUTES_URGENT, PAYOUT_DAY, RENEWAL_WARN_DAYS, serviceOf, servicesForRole, slotHour, type Job, type Role } from "./data";
@@ -64,6 +64,7 @@ export const isLateCancel = (job: Job, setOff: boolean) => setOff || minutesUnti
 
 /** Can this caregiver take this request, given their role, gender and work settings? */
 export function matchesSettings(job: Job, s: CgState) {
+  if (!SERVICES.some((sv) => sv.id === job.serviceId)) return false; // switched off in the admin panel
   const role = effectiveRole(s);
   if (!role) return false;
   const service = serviceOf(job);

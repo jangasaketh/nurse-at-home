@@ -24,7 +24,7 @@ const monthKey = (ms: number) => isoDate(ms).slice(0, 7);
 /* ---------- Notifications ---------- */
 
 const NOTICE_ICON: Record<CgNotice["kind"], IconName> = {
-  request: "bell", cancelled: "calendar", payout: "wallet", document: "file", rating: "heart", verified: "shield", expired: "clock", support: "help",
+  request: "bell", cancelled: "calendar", payout: "wallet", document: "file", rating: "heart", verified: "shield", expired: "clock", support: "help", message: "message",
 };
 
 export function CgNotificationsScreen() {
