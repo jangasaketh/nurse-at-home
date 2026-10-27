@@ -6,10 +6,11 @@ Project: `https://hglhijvvbbmmsjoakvfz.supabase.co` (region South Asia, Mumbai).
 | --- | --- | --- |
 | `001_setup.sql` | Part 1: all tables, access rules (row level security), private file storage, starting lists and settings | Supabase → SQL Editor → New query → paste → Run. Safe to run again. |
 | `002_first_owner.sql` | Makes the first owner of the admin panel (after their login is created in Authentication → Users → Add user) | Change the email and name, then Run. |
+| `003_verification.sql` | Part 3 (version 1.2.0): caregiver sends for verification, admin approves or sends back, pause and resume, tier, renewals, messages to caregivers. Each is a database function that checks the role and writes the audit log. | SQL Editor → New query → paste → Run. Shows "Verification functions are ready". Safe to run again. |
 
 **Phone sign-in for testing:** Authentication → Sign In / Providers → Phone → switch on, and add test numbers with fixed codes (for example `919876543210=123456`). No SMS is sent to test numbers. Real SMS needs DLT registration (India) and an SMS provider.
 
-Coming next: the business actions (accept a request, move a visit forward, cancel with the fee rule, payouts) as database functions.
+Coming next (phase 5): real bookings, with prescription upload, as database functions (accept a request, move a visit forward, cancel with the fee rule).
 
 **Keys.** The project URL and the publishable key (`sb_publishable_…`) go into the apps; they are safe to be public because the access rules decide what each person can see. The secret key (`sb_secret_…`) and the database password must never be put in the apps, in GitHub, or in a chat.
 
