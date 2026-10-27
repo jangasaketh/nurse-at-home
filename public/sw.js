@@ -1,4 +1,5 @@
 // Service worker: lets the installed apps (patient and caregiver) open quickly and work without internet.
+// The admin panel at admin/ is not handled: it always loads from the network.
 // Registered from app/page.tsx as sw.js?v=<app version>. A new version installs a new cache and removes the old one.
 //
 //   Pages:                       network first, saved copy when offline
@@ -54,6 +55,9 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   const sameOrigin = url.origin === self.location.origin;
+
+  // The admin panel (admin/) is for the team, online only: leave its pages to the network.
+  if (sameOrigin && url.pathname.startsWith(new URL(SCOPE).pathname + "admin")) return;
 
   if (req.mode === "navigate" && sameOrigin) {
     const key = pageKey(url);
