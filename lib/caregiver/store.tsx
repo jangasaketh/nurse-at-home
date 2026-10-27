@@ -3,7 +3,9 @@
 // CAREGIVER APP STATE. Saved in the browser under its own key, separate from the patient app.
 // When the backend exists, replace the load/save here and the `set` calls with API calls.
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { db } from "@/lib/supabase";
+import { pullCaregiver, pushCaregiver, type CgSnapshot, type PulledCaregiver } from "./sync";
 import { setLang, type Lang } from "@/lib/i18n";
 import type { Msg } from "@/lib/booking";
 import type { PhotoFile } from "@/lib/prescription";
@@ -132,6 +134,10 @@ export type CgState = {
   renewal: { certificate: PhotoFile; validUntil: string; at: number } | null; // renewed registration waiting for checking
   tier: "full" | "basic"; // set by the verification team: "basic" = dressing and vitals only, even for a nurse
   suspended: { reason: string; at: number } | null; // paused by the admin team: no requests until reinstated
+  mode: "live" | "demo"; // live = real sign-in, details saved to the account; demo = sample data
+  userId: string | null;
+  cgExists: boolean; // the caregiver row is already in the database
+  syncError: boolean;
 };
 
 const now = () => Date.now();
@@ -189,6 +195,10 @@ const initialState: CgState = {
   renewal: null,
   tier: "full",
   suspended: null,
+  mode: "live",
+  userId: null,
+  cgExists: false,
+  syncError: false,
 };
 
 export const CG_STORAGE_KEY = "nurse-at-home-caregiver:v1";
@@ -203,6 +213,9 @@ type Ctx = {
   open: (screen: CgScreen, patch?: Partial<CgState>) => void;
   back: (patch?: Partial<CgState>) => void;
   reset: () => void;
+  /** After a real sign-in: load the caregiver's account and continue to the right screen. */
+  signedIn: (userId: string) => Promise<void>;
+  signOut: () => Promise<void>;
   /** All sample jobs for the caregiver's city (requests and accepted visits are looked up here). */
   jobs: Job[];
   jobById: (id: string | null) => Job | null;
@@ -220,7 +233,12 @@ export function CaregiverProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (saved) setState({ ...initialState, ...JSON.parse(saved) });
+      if (saved) {
+        const parsed = JSON.parse(saved) as Partial<CgState>;
+        // Saved before 1.1.0 (no sign-in yet): that was the demo.
+        const mode = parsed.mode ?? (parsed.role ? "demo" : "live");
+        setState({ ...initialState, ...parsed, mode, syncError: false });
+      }
     } catch {
       // Storage blocked or unreadable: start fresh.
     }
@@ -249,6 +267,60 @@ export function CaregiverProvider({ children }: { children: ReactNode }) {
     }
   }, [state, ready]);
 
+  // Live mode: refresh from the database when the app opens; save role, details and language when they change.
+  const lastPushed = useRef<CgSnapshot | null>(null);
+  const [synced, setSynced] = useState(false);
+  useEffect(() => {
+    if (!ready || state.mode !== "live" || !state.userId || synced) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await db("caregiver").auth.getSession();
+      if (cancelled) return;
+      if (!data.session || data.session.user.id !== state.userId) { setState((prev) => ({ ...initialState, lang: prev.lang })); return; }
+      try {
+        const acc = await pullCaregiver(state.userId!);
+        if (cancelled) return;
+        setState((prev) => mergeCaregiver(prev, acc));
+        lastPushed.current = { lang: acc.lang, role: acc.role, personal: acc.personal };
+      } catch {
+        lastPushed.current = { lang: state.lang, role: state.role, personal: state.personal };
+      }
+      setSynced(true);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, state.mode, state.userId, synced]);
+
+  const snapKey = JSON.stringify({ lang: state.lang, role: state.role, personal: state.personal });
+  useEffect(() => {
+    if (!ready || state.mode !== "live" || !state.userId || !synced || !state.role) return;
+    if (lastPushed.current && JSON.stringify(lastPushed.current) === snapKey) return;
+    const next: CgSnapshot = { lang: state.lang, role: state.role, personal: state.personal };
+    const prevSnap = lastPushed.current;
+    lastPushed.current = next;
+    pushCaregiver(state.userId, prevSnap, next, state.cgExists)
+      .then((exists) => setState((prev) => ({ ...prev, cgExists: exists, syncError: false })))
+      .catch(() => { lastPushed.current = prevSnap; setState((prev) => ({ ...prev, syncError: true })); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapKey, ready, state.mode, state.userId, synced]);
+
+  const signedIn = async (userId: string) => {
+    const acc = await pullCaregiver(userId);
+    lastPushed.current = acc.exists ? { lang: acc.lang, role: acc.role, personal: acc.personal } : null;
+    setSynced(true);
+    setState((prev) => {
+      const merged = mergeCaregiver({ ...prev, mode: "live", userId }, acc);
+      const screen: CgScreen = merged.kycStatus === "approved" ? "jobs" : merged.kycStatus === "submitted" ? "review" : merged.role ? "kyc" : "role";
+      return { ...merged, screen, trail: [] };
+    });
+  };
+  const signOut = async () => {
+    if (state.mode === "live") await db("caregiver").auth.signOut().catch(() => {});
+    lastPushed.current = null;
+    setSynced(false);
+    setState((prev) => ({ ...initialState, lang: prev.lang }));
+  };
+
   const set = (patch: Partial<CgState>) => setState((prev) => ({ ...prev, ...patch }));
   // An empty change keeps the same state, so nothing re-draws or re-saves (the engine checks every second).
   const update = (fn: (prev: CgState) => Partial<CgState>) =>
@@ -258,13 +330,18 @@ export function CaregiverProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, ...patch, screen, trail: [...prev.trail, prev.screen] }));
   const back = (patch: Partial<CgState> = {}) =>
     setState((prev) => ({ ...prev, ...patch, screen: prev.trail[prev.trail.length - 1] ?? "jobs", trail: prev.trail.slice(0, -1) }));
-  const reset = () => setState((prev) => ({ ...initialState, lang: prev.lang }));
+  const reset = () => {
+    if (state.mode === "live") void db("caregiver").auth.signOut();
+    lastPushed.current = null;
+    setSynced(false);
+    setState((prev) => ({ ...initialState, lang: prev.lang }));
+  };
 
   const jobs = sampleJobs(state.personal?.cityId ?? "hyd");
   const jobById = (id: string | null) => (id ? state.upcoming.find((j) => j.id === id) ?? jobs.find((j) => j.id === id) ?? null : null);
 
   return (
-    <CgContext.Provider value={{ state, ready, set, update, go, open, back, reset, jobs, jobById }}>
+    <CgContext.Provider value={{ state, ready, set, update, go, open, back, reset, signedIn, signOut, jobs, jobById }}>
       {children}
     </CgContext.Provider>
   );
@@ -320,3 +397,23 @@ export function approvalPatch(s: CgState): Partial<CgState> {
 }
 
 export { sampleEarnings };
+
+/** Lay the caregiver's account from the database over the phone's state. */
+function mergeCaregiver(prev: CgState, acc: PulledCaregiver): CgState {
+  if (!acc.exists) return { ...prev, cgExists: false, lang: acc.lang ?? prev.lang };
+  const next: CgState = {
+    ...prev,
+    cgExists: true,
+    lang: acc.lang,
+    role: acc.role ?? prev.role,
+    personal: acc.personal ?? prev.personal,
+  };
+  // The verification decision comes from the database once the team decides there (phase 4).
+  if (acc.kycStatus === "approved" || acc.kycStatus === "rejected") {
+    next.kycStatus = acc.kycStatus;
+    next.tier = acc.tier;
+    next.suspended = acc.suspended;
+    next.rejected = acc.rejected;
+  }
+  return next;
+}

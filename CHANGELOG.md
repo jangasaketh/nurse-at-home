@@ -10,6 +10,92 @@ For every version, these all carry the same number:
 
 ---
 
+## 1.1.0 (26 Oct 2026)
+
+**Backend, phase 2: real sign-in**
+- **Patient app:** sign in with your mobile number and a 6-digit code (sent by SMS, or the fixed code of a test number set in Supabase). Wrong or expired codes, too many tries, no internet, and "SMS not switched on yet" each get a clear message; a new code can be asked for after 60 seconds.
+- **Saved to the account:** name, the consent (with its date and time), language, family members, addresses and emergency contact are saved to the database and come back on any phone that signs in with the same number. Profile shows "Saved to your account" (or that it will try again). Log out signs out and clears the phone.
+- **Caregiver app:** the same phone sign-in. The role and "Your details" (name, gender, date of birth, languages, city, area, PIN) are saved to the account and come back on another phone. Documents, bank account and the verification decision stay on the phone until phases 3 and 4.
+- **Admin panel:** sign in with a real email and password. Only people in the team list (`admin_users`) get in; switched-off members are refused. Their role decides the menu. The Team page reads and changes the real team (add someone who has a login, change role, switch access off and on), and each change is written to the audit log in the database. Other pages still show sample data, with a note saying so.
+- **The demo stays:** each login screen has "Try the demo (sample data, no account)". The demo works as before and saves nothing to the database.
+- `supabase/002_first_owner.sql`: makes the first owner after their login is created in Supabase.
+- New text in Telugu and Kannada (`lib/i18n/strings-10.ts`).
+- The sample nurse's registration date (skip verification) now always falls inside the 60-day reminder window.
+
+---
+
+## 1.0.9 (26 Oct 2026)
+
+**Backend, phase 1: the database**
+- New folder `supabase/` with `001_setup.sql`, the database for all three apps, to run once in the Supabase project (`hglhijvvbbmmsjoakvfz`, Mumbai region).
+- 29 tables: cities and areas, services, vitals checks, settings; profiles, admin team, patient families, addresses, emergency contacts, prescriptions; caregivers with qualification, bank account, verification documents and reviews; bookings, job offers, visit records, reviews, earnings, payouts, payments, refunds; support tickets and replies, notifications, messages to caregivers; audit log.
+- Access rules (row level security) on every table: each person sees only their own data, the admin team sees what their role needs, and caregivers see a patient's family, address and prescription only for visits assigned to them.
+- Safety rules in the database itself: prices are set from the services list (a phone cannot change them), a prescription is required where the rules say, a city must be open, caregivers cannot approve themselves, change their tier or rating, or go online before approval or while paused.
+- Private file storage: `prescriptions`, `kyc` and `tickets` buckets, each person uploading only into their own folder.
+- Starting data: the 5 cities with their areas, the 6 services, the vitals checks and today's settings (charges, cancellation rule, pay split, time limits).
+- The apps are not connected yet; that starts with phase 2 (sign-in).
+
+---
+
+## 1.0.8 (12 Oct 2026)
+
+**Admin panel: seven additions**
+1. **Patients:** a new page listing patient accounts. Search by name, phone or a family member’s name; filter by city, open complaints or unpaid charges. Each patient shows their family members (with visits each), addresses, emergency contact, bookings (open any booking from there), complaints and refunds. The patient signed in to the patient app in the same browser appears too, marked "Live · patient app".
+2. **Services, beyond prices:** in Settings → Services and prices you can switch a service off, choose who can do it (nurses only, or nurses and compounders), set whether a prescription is needed, and add a new service (name, description, price, length, icon, what is brought and kept ready, what is included). Injections, IV drips and medication stay nurse-only with a prescription. **Live in the demo:** the patient app shows new services and hides switched-off ones; caregivers stop getting requests for switched-off services.
+3. **Areas inside each city:** Settings → Cities and areas lists each city’s areas, with add and remove. New cities start with no areas, and a city cannot open until it has at least one.
+4. **Team and roles (screens only):** a Team page (owners only) to add people, change their role, or switch off their access. Roles: owner (everything), verification team, support team, finance team, each seeing only its own pages. Signing in with a team member’s email gives their role; a switched-off person cannot sign in. "Prototype: view as" in the top bar switches roles for testing. The activity log now records who did each thing.
+5. **Reports:** a new page with the last 6 months: what patients paid, what caregivers earned, refunds, net income, a chart by month, by city, by service, each caregiver’s earnings, and a GST summary (placeholder 18% on our share, to be confirmed by a chartered accountant). Download each month as CSV. This month uses the sample bookings; earlier months are sample totals.
+6. **Messages to caregivers:** a new page to send one notice to everyone in a city, only nurses or compounders, or only those online. Shows how many will get it and a preview, asks to confirm, keeps a list of sent messages. Ready-made messages (busy evening, Diwali, heavy rain, bank holiday). The caregiver app in the same browser receives it in its notifications.
+7. **Caregiver history:** each caregiver’s panel now shows their documents on file (ID, selfie, certificate, and a renewed certificate waiting) and a history of documents sent, send-backs, approval, service changes, pauses, reinstatements, renewals and reminders, with filters. Decisions made while someone was still an applicant carry over once they are approved.
+
+**Also**
+- Bookings and caregiver pages show the right names for services switched off or added, and for cities added in Settings.
+- Only the panel on top closes with Escape (for example a booking opened from a patient).
+- Caregiver app: team messages appear in notifications with their own icon.
+- Every admin page, including the new ones, passes the text-contrast check.
+
+---
+
+## 1.0.7 (11 Oct 2026)
+
+**Admin panel: colours fixed**
+- The sign-in page lost its colours: the card was see-through and the text, Sign in button and note were hard to read on the dark green background. The admin colours now apply to the sign-in and loading screens too, so the card is white with dark text and a green Sign in button.
+- The red count on Support in the side menu is a darker red, so the white number is easy to read.
+- Every admin screen, side panel and settings tab was checked automatically for text contrast (at least 4.5 to 1, the usual accessibility standard), on a computer and on a phone. All pass.
+
+---
+
+## 1.0.6 (11 Oct 2026)
+
+**New: the admin panel**, at `/admin/` on the same site, for the Nurse at Home team. English only, made for a computer screen (it also works on a phone). Sign in with any email and password (prototype).
+- **Dashboard:** visits today, money collected and what we keep, cancellations, caregivers online, a "waiting for the team" list, bookings for the last 7 days, cities and services.
+- **Verification:** caregivers waiting, with how long they have waited. Review the ID, selfie and certificate, the details, automatic checks (age, IFSC, bank name, registration date) and a checklist. Approve with "All nurse services" or "Dressing and vitals only, for now", or send one document back with a reason. Also: documents sent back, approved, renewed registrations to check, and registrations expiring soon (send a reminder).
+- **Caregivers:** everyone verified, with filters. Change what a nurse can take, pause (suspend) with a reason, reinstate.
+- **Bookings:** all bookings (sample), with filters and search. Reassign a caregiver, cancel (refunded in full), or give a refund. Shows what the patient pays, what the caregiver gets and what we keep.
+- **Refunds:** patients' requests, with a hint from the rules. Approve all or part, or decline with a reason.
+- **Support:** tickets from patients and caregivers, urgent first, ready-made replies, close and reopen.
+- **Payouts:** this week per caregiver (earned, cash collected, to pay), cash owed to us, send payouts, download a bank file (CSV), past weeks.
+- **Settings:** service and vitals-check prices, home visit and urgent charges, the cancellation rule, the pay split (with a worked example), time limits to answer, renewal reminder, cities (pause, add).
+- **Activity log:** every decision, with a CSV download, and "start the sample data again".
+
+**The admin panel is connected to the caregiver app (same browser, until there is a server)**
+- A caregiver who sends documents in the caregiver app appears in Verification, marked "Live · caregiver app".
+- Approving, sending back, changing services, pausing, reinstating, approving or refusing a renewal, replying to a report and paying out all show in the caregiver app straight away, with a notification.
+- Service and vitals-check prices set in Settings are used by the patient and caregiver apps opened in the same browser. The other settings are saved for when the server is connected.
+
+**Caregiver app**
+- Any of the five verification steps can now be sent back (before, only the ID photo). The step shows "Needs a new photo" or "Needs a change".
+- Approved for dressing and vitals only: nurses get only those requests until the team changes it.
+- "Your account is paused" screen with the reason, while still letting the caregiver reach help, reports and notifications.
+- Replies from support show under "Your reports".
+- The waiting screen links to the admin panel (prototype).
+- New text in Telugu and Kannada (`lib/i18n/strings-9.ts`).
+
+**Also**
+- The offline support leaves the admin panel alone (it always loads fresh).
+
+---
+
 ## 1.0.5 (11 Oct 2026)
 
 Includes everything in 1.0.4 (the "Prototype: skip verification" button), which was not published on its own.

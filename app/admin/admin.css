@@ -213,3 +213,10 @@ button.astat:hover { border-color: var(--a-line-strong); }
 /* Inputs inside table cells keep their label for screen readers only. */
 .ainput-num > span:first-of-type { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .ainput-num { position: relative; }
+/* Labels kept for screen readers only */
+.ainput-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.abtn-x { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 16px; line-height: 1; color: var(--a-soft); }
+.abtn-x:hover { background: #dfe5e9; color: var(--a-danger); }
+.adm-roleview { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--a-muted); }
+.adm-roleview select { border: 1px solid var(--a-line-strong); border-radius: 8px; padding: 4px 8px; background: #fff; font-size: 13px; }
+.adenied { text-align: center; padding: 48px 16px; display: flex; flex-direction: column; gap: 10px; align-items: center; }

@@ -15,6 +15,7 @@ import {
   type PatientAccount, type RefundRequest, type Renewal, type Settings, type TeamMember, type Tier,
 } from "./data";
 import * as link from "./link";
+import { db } from "@/lib/supabase";
 import { PATIENT_STORAGE_KEY, readPatient, type LivePatient } from "./patient-link";
 
 export type Decision = { status: "approved" | "sent-back"; tier?: Tier; step?: KycStep; reason?: string; at: number };
@@ -32,6 +33,8 @@ export type AdminState = {
   adminName: string;
   adminEmail: string;
   role: AdminRole; // the signed-in team member's role (decides which pages they see)
+  mode: "live" | "demo"; // live = signed in with a real team account; demo = the sample admin
+  userId: string | null;
   team: TeamMember[];
   page: AdminPage;
   applicantDecisions: Record<string, Decision>;
@@ -55,6 +58,8 @@ const initialState: AdminState = {
   adminName: "",
   adminEmail: "",
   role: "owner",
+  mode: "demo",
+  userId: null,
   team: sampleTeam(),
   page: "dashboard",
   applicantDecisions: {},
@@ -200,6 +205,20 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     setCg(link.readCg());
     setPatient(readPatient());
     setReady(true);
+    // A real team sign-in: check it is still valid and the person is still an active team member.
+    (async () => {
+      const saved = (() => { try { return JSON.parse(window.localStorage.getItem(ADMIN_STORAGE_KEY) ?? "null") as Partial<AdminState> | null; } catch { return null; } })();
+      if (!saved?.signedIn || saved.mode !== "live") return;
+      const client = db("admin");
+      const { data } = await client.auth.getSession();
+      const member = data.session ? (await client.from("admin_users").select("name, email, role, active").eq("id", data.session.user.id).maybeSingle()).data : null;
+      if (!data.session || !member || !member.active) {
+        await client.auth.signOut().catch(() => {});
+        setState((prev) => ({ ...prev, signedIn: false, userId: null }));
+        return;
+      }
+      setState((prev) => ({ ...prev, adminName: member.name, adminEmail: member.email, role: member.role as AdminRole, userId: data.session!.user.id }));
+    })().catch(() => {});
     // The caregiver and patient apps save in other tabs: show their changes at once.
     const onStorage = (e: StorageEvent) => {
       if (e.key === CG_STORAGE_KEY) setCg(link.readCg());
@@ -231,8 +250,11 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const set = (patch: Partial<AdminState>) => setState((prev) => ({ ...prev, ...patch }));
   const update = (fn: (prev: AdminState) => Partial<AdminState>) => setState((prev) => ({ ...prev, ...fn(prev) }));
   const go = (page: AdminPage) => set({ page });
-  const log = (text: string, page: AdminPage) =>
+  const log = (text: string, page: AdminPage) => {
+    // Live: also written to the audit log in the database.
+    if (state.mode === "live" && state.userId) void db("admin").from("audit_log").insert({ actor: state.userId, page, action: "note", detail: { text } }).then(() => {}, () => {});
     setState((prev) => ({ ...prev, activity: [{ id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, at: Date.now(), text, page, by: prev.adminName }, ...prev.activity].slice(0, 300) }));
+  };
   const addHistory = (id: string, kind: HistoryKind, text: string) =>
     setState((prev) => ({ ...prev, history: { ...prev.history, [id]: [...(prev.history[id] ?? []), { at: Date.now(), kind, text, by: prev.adminName }] } }));
   const refreshCg = () => setCg(link.readCg());

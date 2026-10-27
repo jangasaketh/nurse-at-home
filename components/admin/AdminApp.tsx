@@ -7,6 +7,7 @@ import { AdminProvider, useAdmin } from "@/lib/admin/store";
 import { canOpen, ROLE_HELP, ROLE_PAGES, ROLE_TEXT, type AdminPage, type AdminRole } from "@/lib/admin/data";
 import { Icon, type IconName } from "../Icon";
 import { Field, ToastProvider } from "./ui";
+import { db } from "@/lib/supabase";
 import { DashboardPage } from "./DashboardPage";
 import { VerificationPage } from "./VerificationPage";
 import { CaregiversPage } from "./CaregiversPage";
@@ -40,44 +41,64 @@ const NAV: { id: AdminPage; label: string; icon: IconName }[] = [
 
 function LoginPage() {
   const { state, set } = useAdmin();
-  const [blocked, setBlocked] = useState("");
+  const [problem, setProblem] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [tried, setTried] = useState(false);
+  const [busy, setBusy] = useState(false);
   const errors = {
     email: !/^\S+@\S+\.\S+$/.test(email) ? "Enter your work email." : "",
-    password: password.length < 4 ? "Enter your password." : "",
+    password: password.length < 6 ? "Enter your password (at least 6 characters)." : "",
   };
-  const signIn = (name: string, role: AdminRole, mail: string) => set({ signedIn: true, adminName: name, adminEmail: mail, role, page: "dashboard" });
-  const submit = () => {
+  // Demo: the sample admin and sample team, with sample data. Nothing is saved to the database.
+  const demo = (name: string, role: AdminRole, mail: string) => set({ signedIn: true, mode: "demo", userId: null, adminName: name, adminEmail: mail, role, page: "dashboard" });
+
+  // Real sign-in: the email and password of a login made in Supabase, for someone in the team list.
+  const submit = async () => {
     setTried(true);
-    setBlocked("");
+    setProblem("");
     if (errors.email || errors.password) return;
-    const member = state.team.find((m) => m.email.toLowerCase() === email.trim().toLowerCase());
-    if (member && !member.active) { setBlocked("This team member’s access is switched off. Ask the owner to switch it on in Team."); return; }
-    if (member) { signIn(member.name, member.role, member.email); return; }
-    // Prototype: an email that is not in the team signs in as an owner.
-    const local = email.split("@")[0].replace(/[._-]+/g, " ");
-    signIn(local.charAt(0).toUpperCase() + local.slice(1), "owner", email.trim());
+    setBusy(true);
+    const client = db("admin");
+    const { data, error } = await client.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+    if (error || !data.user) {
+      setBusy(false);
+      setProblem(/invalid|credentials/i.test(error?.message ?? "") ? "That email and password do not match a team login." : /fetch|network/i.test(error?.message ?? "") ? "No internet connection. Check it and try again." : `Could not sign in: ${error?.message ?? "unknown problem"}`);
+      return;
+    }
+    const { data: member, error: mErr } = await client.from("admin_users").select("name, email, role, active").eq("id", data.user.id).maybeSingle();
+    setBusy(false);
+    if (mErr || !member) {
+      await client.auth.signOut();
+      setProblem("This login is not in the team yet. An owner adds people in Team (see the setup guide for the first owner).");
+      return;
+    }
+    if (!member.active) {
+      await client.auth.signOut();
+      setProblem("This team member’s access is switched off. Ask an owner to switch it on in Team.");
+      return;
+    }
+    set({ signedIn: true, mode: "live", userId: data.user.id, adminName: member.name, adminEmail: member.email, role: member.role as AdminRole, page: "dashboard" });
   };
   return (
     <main className="adm-login">
-      <form className="acard" onSubmit={(e) => { e.preventDefault(); submit(); }} noValidate>
+      <form className="acard" onSubmit={(e) => { e.preventDefault(); void submit(); }} noValidate>
         <div className="adm-row">
           <span className="logo" style={{ width: 40, height: 40, borderRadius: 10, background: "#0e5c4a", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><Icon name="bag" size={22} /></span>
           <div><h1 style={{ fontSize: 22 }}>Nurse at Home</h1><span className="adm-muted adm-small">Team admin panel</span></div>
         </div>
         <Field id="adm-email" label="Work email" type="email" value={email} onChange={setEmail} error={tried ? errors.email : ""} />
         <Field id="adm-password" label="Password" type="password" value={password} onChange={setPassword} error={tried ? errors.password : ""} />
-        {blocked && <div className="anote danger" role="alert">{blocked}</div>}
-        <button type="submit" className="abtn abtn-primary">Sign in</button>
-        <div className="anote info adm-small">Prototype: any password works. A team member’s email (see Team) signs in with their role; any other email signs in as an owner. Real sign-in, with a code sent to the team member’s phone, comes with the server.</div>
-        <button type="button" className="abtn" onClick={() => signIn("Admin (sample)", "owner", "admin@nurseathome.in")}>Prototype: sign in as the sample admin</button>
-        <div className="adm-col" style={{ gap: 6 }}>
-          <span className="adm-small adm-muted">Prototype: sign in as a team member</span>
+        {problem && <div className="anote danger" role="alert">{problem}</div>}
+        <button type="submit" className="abtn abtn-primary" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
+        <hr className="adm-sep" />
+        <div className="adm-col" style={{ gap: 8 }}>
+          <span className="adm-strong">Try the demo (sample data)</span>
+          <span className="adm-small adm-muted">No account needed. Nothing is saved to the database.</span>
+          <button type="button" className="abtn" onClick={() => demo("Admin (sample)", "owner", "admin@nurseathome.in")}>Prototype: sign in as the sample admin</button>
           <div className="adm-row" style={{ gap: 6 }}>
             {state.team.filter((m) => m.active).map((m) => (
-              <button key={m.id} type="button" className="abtn abtn-sm" onClick={() => signIn(m.name, m.role, m.email)}>{ROLE_TEXT[m.role].replace(" team", "")}</button>
+              <button key={m.id} type="button" className="abtn abtn-sm" onClick={() => demo(m.name, m.role, m.email)}>{ROLE_TEXT[m.role].replace(" team", "")}</button>
             ))}
           </div>
         </div>
@@ -176,15 +197,16 @@ function Shell() {
         <header className="adm-top">
           <LiveChip />
           <span className="grow" />
-          <label className="adm-roleview" htmlFor="adm-viewas">Prototype: view as
+          {state.mode === "demo" && <label className="adm-roleview" htmlFor="adm-viewas">Prototype: view as
             <select id="adm-viewas" value={state.role} onChange={(e) => { const role = e.target.value as AdminRole; set({ role, page: ROLE_PAGES[role].includes(state.page) ? state.page : "dashboard" }); }}>
               {(Object.keys(ROLE_TEXT) as AdminRole[]).map((r) => <option key={r} value={r}>{ROLE_TEXT[r]}</option>)}
             </select>
-          </label>
+          </label>}
           <span className="adm-small adm-muted">Signed in as <b style={{ color: "var(--a-ink)" }}>{state.adminName}</b> · {ROLE_TEXT[state.role]}</span>
-          <button type="button" className="abtn abtn-sm" onClick={() => set({ signedIn: false })}>Sign out</button>
+          <button type="button" className="abtn abtn-sm" onClick={() => { if (state.mode === "live") void db("admin").auth.signOut(); set({ signedIn: false, userId: null }); }}>Sign out</button>
         </header>
         <main className="adm-content">
+          {state.mode === "live" && <div className="anote info adm-small">Signed in with your real team account. The team list is from the database; the other pages still show sample data until the apps are connected (phases 3 to 5).</div>}
           <Page />
         </main>
       </div>

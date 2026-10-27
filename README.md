@@ -1,17 +1,18 @@
-# Nurse at Home: patient app and caregiver app
+# Nurse at Home: patient app, caregiver app and admin panel
 
-Two web apps in one project, published together on one site:
+Three web apps in one project, published together on one site:
 
 | App | Who it is for | Address on GitHub Pages |
 | --- | --- | --- |
 | **Patient app** | Families booking home visits: injections, IV drips, wound dressing, elder care dressing, scheduled medication and vitals checks | `https://YOUR-USERNAME.github.io/nurse-at-home/` |
 | **Caregiver app** | Nurses and compounders: sign up and get verified, take visit requests, carry out each visit, see earnings | `https://YOUR-USERNAME.github.io/nurse-at-home/caregiver/` |
+| **Admin panel** (1.0.6) | The Nurse at Home team: verify caregivers, bookings, refunds, support, payouts, prices and rules. English only, made for a computer screen | `https://YOUR-USERNAME.github.io/nurse-at-home/admin/` |
 
 Each app has its own colour (green for patients, blue for caregivers), its own home-screen icon and its own saved data. They link to each other: the patient login screen and Profile → "Are you a nurse or compounder? Work with us", and the caregiver login → "Need a nurse at home?".
 
-This is the **frontend only**. There is no server yet. Caregivers, patients, requests, prices, ratings and earnings are sample data. The two apps do not talk to each other yet: a booking made in the patient app does not appear in the caregiver app until there is a server. What a person enters (name, family, addresses, bookings) is saved in their own browser, so it survives a refresh on that device but is not shared with any other device. "Nurse at Home" is a placeholder name.
+This is the **frontend only**. There is no server yet. Caregivers, patients, requests, prices, ratings and earnings are sample data. The patient and caregiver apps do not talk to each other yet: a booking made in the patient app does not appear in the caregiver app until there is a server. The admin panel is the exception, for the demo: it is linked to the caregiver app **in the same browser** (see "What to test: admin panel"), and the services list set in it (prices, switched-off services, new services) is used by both apps in that browser. It also shows the patient signed in to the patient app in that browser, read only. What a person enters (name, family, addresses, bookings) is saved in their own browser, so it survives a refresh on that device but is not shared with any other device. "Nurse at Home" is a placeholder name.
 
-**Current version: 1.0.5.** Each update gets the next number (1.0.1, 1.0.2, …). What changed in each version is in `CHANGELOG.md`. The version is set in `package.json` and is shown at the bottom of Profile in the app.
+**Current version: 1.1.0.** Real sign-in works (phase 2 of the backend): see "Sign-in" below and `supabase/README.md`. Each update gets the next number (1.0.1, 1.0.2, …). What changed in each version is in `CHANGELOG.md`. The version is set in `package.json` and is shown at the bottom of Profile in the app.
 
 ## Reminder: the cancellation rule is provisional
 
@@ -40,7 +41,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000 for the patient app and http://localhost:3000/caregiver/ for the caregiver app. To log in, keep the sample mobile number and type any 6 digits as the OTP.
+Open http://localhost:3000 for the patient app, http://localhost:3000/caregiver/ for the caregiver app and http://localhost:3000/admin/ for the admin panel. To log in, keep the sample mobile number and type any 6 digits as the OTP.
 
 ## Host it on GitHub Pages
 
@@ -49,9 +50,50 @@ A Next.js project has no `index.html` until it is built, so GitHub Pages needs a
 1. Keep `next.config.mjs` in the same folder as `package.json`.
 2. In the repository, open Settings, then Pages, and set Source to "GitHub Actions".
 3. Keep the workflow file at `.github/workflows/deploy.yml`.
-4. Every commit rebuilds both apps. The Actions tab shows progress. The patient app is at `https://YOUR-USERNAME.github.io/YOUR-REPO/` and the caregiver app at `https://YOUR-USERNAME.github.io/YOUR-REPO/caregiver/`. Nothing extra is needed for the caregiver app: it is built by the same workflow.
+4. Every commit rebuilds both apps. The Actions tab shows progress. The patient app is at `https://YOUR-USERNAME.github.io/YOUR-REPO/` and the caregiver app at `https://YOUR-USERNAME.github.io/YOUR-REPO/caregiver/`. The admin panel is at `…/YOUR-REPO/admin/`. Nothing extra is needed for the caregiver app or the admin panel: they are built by the same workflow.
 
 Vercel and Netlify also work: import the repository and deploy with the default settings.
+
+## Sign-in (1.1.0)
+
+- **Patients and caregivers** sign in with a mobile number and a 6-digit code. Until SMS is set up (it needs DLT registration in India), use the **test numbers** added in Supabase → Authentication → Sign In / Providers → Phone, each with a fixed code.
+- What is saved to the account: patients' name, consent, language, family, addresses and emergency contact; caregivers' role and details. The rest (bookings, documents, earnings) is still on the phone until the next phases.
+- **Admin team** signs in with email and password. The first owner is made with `supabase/002_first_owner.sql`; everyone else is added from the Team page after their login is created in Supabase → Authentication → Users → Add user.
+- Every login screen keeps **"Try the demo"**, which works as before with sample data and saves nothing.
+
+## What to test: admin panel (1.0.6)
+
+Open `/admin/`. Any email and password work, or press "Prototype: sign in as the sample admin". English only, designed for a computer (it also works on a phone).
+
+**The link with the caregiver app (same browser)**
+1. Open the caregiver app in another tab, sign up and send your documents (do not press "approve me").
+2. In the admin panel the top bar says "Caregiver app: documents waiting for you". Verification → your caregiver is in the list with a blue "Live · caregiver app" label.
+3. Open it: ID, selfie and certificate, the details, automatic checks, and a checklist. Send a document back with a reason → the caregiver tab shows it at once. Fix it there and send again → it comes back marked "Sent again".
+4. Approve, choosing "All nurse services" or "Dressing and vitals only, for now" → the caregiver tab shows "You are verified".
+5. Caregivers → open them: change what they can take, pause (suspend) with a reason, reinstate. The caregiver app follows each change.
+6. A report sent from the caregiver app appears in Support. Reply → the caregiver sees it under "Your reports".
+7. Payouts → "Pay now" on the live caregiver → it shows in their payout history.
+8. A renewed registration sent from the caregiver app appears under Verification → Renewals. Approve it → the new date shows in their Profile.
+
+**Pages**
+- **Dashboard:** today's visits, money collected, cancellations, caregivers online, what is waiting for the team, bookings for the last 7 days, cities and services.
+- **Verification:** waiting, sent back, approved, renewals, and registrations expiring soon (send a reminder).
+- **Caregivers:** everyone verified, with filters; change services, pause, reinstate.
+- **Bookings:** filters and search; reassign a caregiver, cancel (refund in full), or give a refund.
+- **Refunds:** patients' requests with a hint from the rules; approve all or part, or decline with a reason.
+- **Support:** tickets from patients and caregivers, urgent first; ready-made replies.
+- **Payouts:** this week per caregiver (earned, cash collected, to pay), cash owed to us, send payouts, bank file (CSV), past weeks.
+- **Settings:** service and vitals-check prices (**live**: open the patient app in the same browser to see a new price), charges and the cancellation rule, pay split with a worked example, time limits, cities (pause, add). Only the prices are live for now; the other numbers are used by the Bookings and Payouts pages here, and by the apps once there is a server.
+- **Activity log:** every decision and who made it, with a CSV download, and "start the sample data again".
+
+**Added in 1.0.8**
+- **Patients:** search by name, phone or family member; family, addresses, bookings, complaints, refunds. Sign in to the patient app in another tab and you appear here.
+- **Settings → Services and prices:** switch a service off, change who can do it and whether it needs a prescription, add a new service. Open the patient app in the same browser to see the change.
+- **Settings → Cities and areas:** add and remove areas; a new city needs an area before it can open.
+- **Team:** add people, change roles, switch off access. Sign in with `ravi@nurseathome.in` (verification), `sana@nurseathome.in` (support) or `kiran@nurseathome.in` (finance) to see what each role can open, or use "Prototype: view as" in the top bar.
+- **Reports:** 6 months of revenue, caregiver earnings, refunds and a GST summary, with CSV download.
+- **Messages:** send a notice to caregivers by city and role; the caregiver app in the same browser receives it.
+- **Caregiver history:** in each caregiver's panel, documents on file and everything that happened to them.
 
 ## What to test: caregiver app
 
@@ -82,7 +124,7 @@ Open `/caregiver/`. Any 6 digits work as the OTP.
 - After a finished visit, a rating arrives: Profile → Ratings and reviews.
 - Help or Profile → Report a problem: send a report and see it under "Your reports".
 - Earnings → Payout history and statements: past payouts, the monthly statement, and "Download statement (CSV)".
-- With "skip verification", the sample nurse's registration runs out in about six weeks, so the renewal banner shows. "Renew now" → add a certificate and a new month → "Prototype: approve the renewal".
+- With "skip verification", the sample nurse's registration runs out in 3 to 7 weeks, so the renewal banner shows. "Renew now" → add a certificate and a new month → "Prototype: approve the renewal".
 
 **Schedule, earnings, profile**
 - Schedule lists accepted visits by day; repeat visits move to the next day after each visit. Work settings set days, hours, distance, services and urgent requests, and the requests change to match.
@@ -164,6 +206,12 @@ Choose the language on the login screen or under Profile → Language. The choic
 | Caregiver Terms and Code of Conduct text | `CG_LEGAL` in `components/caregiver/AccountScreens.tsx` (a lawyer must write these) |
 | Caregiver app icon and name ("NAH Caregiver") | `public/caregiver/icons/`, `public/caregiver/manifest.webmanifest`, `app/caregiver/layout.tsx` |
 | Caregiver prototype buttons ("approve me", "skip the wait", "use the sample note", sample requests) | `components/caregiver/` (search for "Prototype") |
+| Admin sign-in (any email works) and the prototype buttons | `LoginPage` in `components/admin/AdminApp.tsx`; search `components/admin/` for "Prototype" |
+| Admin sample data: applicants, caregivers, patient accounts, bookings, refunds, tickets, past payouts, team, caregiver history, earlier months for reports | `lib/admin/data.ts` |
+| Admin roles and which pages each can open | `ROLE_PAGES` in `lib/admin/data.ts` |
+| GST rate and treatment in Reports (placeholder 18% on our share; a chartered accountant must confirm) | `GST_RATE`, `gstOn()` in `lib/admin/data.ts` |
+| Ready-made messages to caregivers | `TEMPLATES` in `components/admin/MessagesPage.tsx` |
+| Ready-made reasons and replies (send back, pause, renewal, support) | `SEND_BACK_REASONS` in `lib/admin/data.ts`, `SUSPEND_REASONS` in `components/admin/CaregiversPage.tsx`, `RENEWAL_REASONS` in `components/admin/VerificationPage.tsx`, `QUICK` in `components/admin/SupportPage.tsx` (each reason shown to caregivers also needs a Telugu and Kannada line in `lib/i18n/strings-9.ts`) |
 | Telugu and Kannada wording (trial, needs native-speaker review) | `lib/i18n/strings-*.ts` |
 | Terms of Use and Privacy Policy text | `LEGAL` in `lib/data.ts` (a lawyer must write these) |
 | Prototype tools block and Prototype buttons | `ProfileScreen` in `components/TabScreens.tsx`, and the dashed box in `TrackingScreen` in `components/VisitScreens.tsx` (delete them) |
@@ -197,6 +245,9 @@ Choose the language on the login screen or under Profile → Language. The choic
 | `components/caregiver/MoreScreens.tsx` | Notifications, ratings and reviews, report a problem, payouts and statement, patient cancelled, renew registration, renewal banner |
 | `lib/caregiver/engine.ts` | Request time limits and expiry, renewal reminders, "patient cancels" |
 | `public/caregiver/` | Caregiver home-screen icon and manifest |
+| `app/admin/` | The admin panel's page, its title and its styles (`admin.css`) |
+| `components/admin/` | Admin pages: `AdminApp` (sign-in, menu, roles), `DashboardPage`, `VerificationPage`, `CaregiversPage` (with documents and history), `PatientsPage`, `BookingsPages` (bookings and refunds), `SupportPage`, `MessagesPage`, `PayoutsPage`, `ReportsPage`, `SettingsPage`, `TeamPage`, `ActivityPage`, and `ui.tsx` (tables, side panel, badges) |
+| `lib/admin/` | Admin sample data (`data.ts`), saved decisions (`store.tsx`), the link to the caregiver app (`link.ts`) and to the patient app (`patient-link.ts`) |
 | `components/ui.tsx` | Shared parts: buttons, form fields, loading, error and empty states |
 
 ## Not built yet
@@ -204,11 +255,12 @@ Choose the language on the login screen or under Profile → Language. The choic
 Search for `TODO` in the code to find each spot.
 
 - A server and database: real OTP by SMS, accounts that work across devices, and connecting the two apps (a patient booking reaching a real caregiver)
-- Verification by a real team (the admin panel), and storing ID and certificate photos privately
+- Storing ID and certificate photos privately on a server (the admin panel reads them from the same browser for now)
+- Admin accounts with roles (support, verification, finance) and a code sent to the team member's phone
 - Real payouts to caregivers' bank accounts
 - Uploading the prescription to a server (today it is kept only in the browser, and a PDF is not previewed)
 - Live map and caregiver location
-- Payments and refunds
+- Payments, and refunds through the payment gateway (the admin panel records refund decisions only)
 - Calls and chat
 - Real push or SMS notifications (the app only shows its own in-app list)
 - Tamil, Malayalam and Marathi versions of the screens (Telugu and Kannada are done as a trial)

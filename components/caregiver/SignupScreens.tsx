@@ -2,7 +2,9 @@
 
 // CAREGIVER APP: sign in, choose a role, and get verified (KYC).
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { authProblem, db, intlPhone } from "@/lib/supabase";
+import { authMessage } from "../AuthScreens";
 import { approvalPatch, useCg, KYC_STEPS, type CgState, type KycStep, type Qualification } from "@/lib/caregiver/store";
 import { sampleValidUntil } from "@/lib/caregiver/engine";
 import { COMPOUNDER_TRAINING, ID_TYPES, NURSE_COURSES, servicesForRole, SPOKEN_LANGUAGES, type IdType } from "@/lib/caregiver/data";
@@ -37,11 +39,20 @@ const fixPatch = (state: CgState, step: KycStep): Partial<CgState> =>
 export function CgLoginScreen() {
   const { state, set } = useCg();
   const [error, setError] = useState(false);
-  const submit = (e: FormEvent) => {
+  const [problem, setProblem] = useState("");
+  const [busy, setBusy] = useState(false);
+  // Real sign-in: a 6-digit code by SMS (or the fixed code of a test number).
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (state.phone.length === 10) set({ screen: "otp", trail: [] });
-    else setError(true);
+    setProblem("");
+    if (state.phone.length !== 10) { setError(true); return; }
+    setBusy(true);
+    const { error: err } = await db("caregiver").auth.signInWithOtp({ phone: intlPhone(state.phone) });
+    setBusy(false);
+    if (err) { setProblem(authMessage(authProblem(err))); return; }
+    set({ mode: "live", screen: "otp", trail: [] });
   };
+  const demo = () => set({ mode: "demo", userId: null, screen: "otp", trail: [] });
   return (
     <form className="screen screen-white login" onSubmit={submit} noValidate>
       <div className="row-inline" style={{ gap: 10 }}>
@@ -66,26 +77,56 @@ export function CgLoginScreen() {
             onChange={(e) => { set({ phone: digits(e.target.value, 10) }); setError(false); }} />
         </div>
         {error && <div role="alert" className="error">{t("Enter a 10-digit mobile number.")}</div>}
-        <button type="submit" className="btn btn-primary" style={{ marginTop: 8 }}>{t("Send OTP")}</button>
+        {problem && <div role="alert" className="error">{problem}</div>}
+        <button type="submit" className="btn btn-primary" style={{ marginTop: 8 }} disabled={busy}>{busy ? t("Sending…") : t("Send OTP")}</button>
+        <button type="button" className="link-btn small" onClick={demo}>{t("Try the demo (sample data, no account)")}</button>
       </div>
       <div className="spacer" />
       <div className="stack-sm">
         <a className="link-btn small" href={`${BASE}/`}>{t("Need a nurse at home? Open the patient app")}</a>
-        <p className="tiny muted">{t("Prototype. Requests, patients and earnings are examples. What you enter stays on this device.")}</p>
+        <p className="tiny muted">{t("Your role and details are saved to your account. Requests, patients and earnings are still examples while we finish the app.")}</p>
       </div>
     </form>
   );
 }
 
 export function CgOtpScreen() {
-  const { state, set, go } = useCg();
+  const { state, set, go, signedIn } = useCg();
   const [otp, setOtp] = useState("");
   const [error, setError] = useState(false);
-  const submit = (e: FormEvent) => {
+  const [problem, setProblem] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [wait, setWait] = useState(60);
+  const live = state.mode === "live";
+  useEffect(() => {
+    if (!live || wait <= 0) return;
+    const id = setTimeout(() => setWait((w) => w - 1), 1000);
+    return () => clearTimeout(id);
+  }, [live, wait]);
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
+    setProblem("");
     if (otp.length !== 6) return setError(true);
-    const screen = state.kycStatus === "approved" ? "jobs" : state.kycStatus === "submitted" ? "review" : state.role ? "kyc" : "role";
-    set({ screen, trail: [] });
+    if (!live) {
+      const screen = state.kycStatus === "approved" ? "jobs" : state.kycStatus === "submitted" ? "review" : state.role ? "kyc" : "role";
+      set({ screen, trail: [] });
+      return;
+    }
+    setBusy(true);
+    const { data, error: err } = await db("caregiver").auth.verifyOtp({ phone: intlPhone(state.phone), token: otp, type: "sms" });
+    if (err || !data.user) { setBusy(false); setProblem(authMessage(authProblem(err))); return; }
+    try {
+      await signedIn(data.user.id);
+    } catch (e2) {
+      setBusy(false);
+      setProblem(authMessage(authProblem(e2)));
+    }
+  };
+  const resend = async () => {
+    setProblem("");
+    const { error: err } = await db("caregiver").auth.signInWithOtp({ phone: intlPhone(state.phone) });
+    if (err) setProblem(authMessage(authProblem(err)));
+    else setWait(60);
   };
   return (
     <form className="screen screen-white" onSubmit={submit} noValidate>
@@ -100,9 +141,14 @@ export function CgOtpScreen() {
           <input id="cg-otp" className="otp-input" type="tel" inputMode="numeric" autoComplete="one-time-code" value={otp}
             onChange={(e) => { setOtp(digits(e.target.value, 6)); setError(false); }} />
           {error && <div role="alert" className="error">{t("Enter all 6 digits of the code.")}</div>}
-          <p className="small muted">{t("Prototype: any 6 digits work.")}</p>
+          {problem && <div role="alert" className="error">{problem}</div>}
+          {live ? (
+            wait > 0
+              ? <p className="small muted">{t("You can ask for a new code in {n} seconds.", { n: wait })}</p>
+              : <button type="button" className="link-btn small" onClick={resend}>{t("Send a new code")}</button>
+          ) : <p className="small muted">{t("Demo: any 6 digits work.")}</p>}
         </div>
-        <button type="submit" className="btn btn-primary">{t("Verify and continue")}</button>
+        <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? t("Checking…") : t("Verify and continue")}</button>
       </div>
     </form>
   );
@@ -172,7 +218,7 @@ export function KycScreen() {
       qualification: state.qualification?.certificate ? state.qualification : {
         course: nurse ? "GNM" : "First aid and wound care course", council: nurse ? cityState(city) : "", regNo: nurse ? "48213" : "",
         years: "5", certificate: samplePhoto("certificate.jpg"), refName: "", refPhone: "",
-        // About six weeks away, so the renewal reminder can be seen.
+        // 3 to 7 weeks away, so the renewal reminder can be seen.
         validUntil: nurse ? sampleValidUntil() : undefined,
       },
       bank: state.bank ?? { holder: state.personal?.name ?? "Kavya Reddy", account: "123456789012", ifsc: "SBIN0001234", upi: "" },

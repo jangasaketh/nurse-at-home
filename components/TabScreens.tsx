@@ -174,8 +174,9 @@ export function RecordsScreen() {
 }
 
 export function ProfileScreen() {
-  const { state, set, go, open, reset } = useApp();
+  const { state, set, go, open, reset, signOut } = useApp();
   const [askReset, setAskReset] = useState(false);
+  const live = state.mode === "live";
   const me = state.patients.find((p) => p.relation === SELF);
   const unread = state.notifications.filter((n) => !n.read).length;
 
@@ -189,6 +190,9 @@ export function ProfileScreen() {
           <div className="stack-xs" style={{ minWidth: 0 }}>
             <h1 style={{ fontSize: 24 }}>{me?.name ?? t("Your profile")}</h1>
             <div className="muted">+91 {state.phone}</div>
+            {live
+              ? <span className={`small ${state.syncError ? "error" : "ok-text"}`}>{state.syncError ? t("Not saved to your account yet. We will try again.") : t("Saved to your account")}</span>
+              : <span className="pill pill-role" style={{ alignSelf: "flex-start" }}>{t("Demo")}</span>}
           </div>
         </div>
 
@@ -306,7 +310,8 @@ export function ProfileScreen() {
           )}
         </div>
 
-        <button type="button" className="btn btn-danger" onClick={() => go("login")}>{t("Log out")}</button>
+        {/* Live: sign out of the account and clear this phone. Demo: back to the login screen, keeping the demo data. */}
+        <button type="button" className="btn btn-danger" onClick={() => (live ? void signOut() : go("login"))}>{t("Log out")}</button>
         <div className="tiny muted" style={{ textAlign: "center" }}>{t("Version {v}", { v: process.env.NEXT_PUBLIC_APP_VERSION ?? "" })}</div>
       </div>
     </div>

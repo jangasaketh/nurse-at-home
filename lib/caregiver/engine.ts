@@ -104,8 +104,9 @@ export function patientCancelPatch(prev: CgState, job: Job): Partial<CgState> {
   };
 }
 
-/** A "valid until" month about six weeks from now, so the renewal reminder shows in the prototype. */
+/** A "valid until" month 3 to 7 weeks from now, so the renewal reminder shows in the prototype. */
 export function sampleValidUntil() {
-  const d = new Date(`${addDays(todayISO(), 40)}T00:00:00`);
+  // The month 20 days from now ends 20 to 51 days away: always inside the 60-day reminder window.
+  const d = new Date(`${addDays(todayISO(), 20)}T00:00:00`);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }

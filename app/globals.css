@@ -363,3 +363,4 @@ a.btn-danger-solid { color: #ffffff; }
 .bar-row { display: grid; grid-template-columns: 12px 1fr 18px; gap: 8px; align-items: center; }
 .bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
 .bar span { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+.notice-icon.kind-message { background: #e5edf7; color: #1d4e89; }

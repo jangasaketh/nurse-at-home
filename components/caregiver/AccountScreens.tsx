@@ -17,7 +17,8 @@ import { Header, Rows } from "../ui";
 const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 export function CgProfileScreen() {
-  const { state, set, go, open, reset } = useCg();
+  const { state, set, go, open, reset, signOut } = useCg();
+  const live = state.mode === "live";
   const [askReset, setAskReset] = useState(false);
   const p = state.personal;
   const q = state.qualification;
@@ -43,6 +44,9 @@ export function CgProfileScreen() {
               {state.kycStatus === "approved" && <span className="pill pill-ok"><Icon name="shield" size={14} />{t("Verified")}</span>}
               <span className="muted">{nurse ? t("Registered nurse") : t("Compounder")}</span>
             </div>
+            {live
+              ? <span className={`small ${state.syncError ? "error" : "ok-text"}`}>{state.syncError ? t("Not saved to your account yet. We will try again.") : t("Saved to your account")}</span>
+              : <span className="pill pill-role" style={{ alignSelf: "flex-start" }}>{t("Demo")}</span>}
           </div>
         </div>
 
@@ -131,7 +135,7 @@ export function CgProfileScreen() {
           )}
         </div>
 
-        <button type="button" className="btn btn-danger" onClick={() => go("login")}>{t("Log out")}</button>
+        <button type="button" className="btn btn-danger" onClick={() => (live ? void signOut() : go("login"))}>{t("Log out")}</button>
         <div className="tiny muted" style={{ textAlign: "center" }}>{t("Version {v}", { v: process.env.NEXT_PUBLIC_APP_VERSION ?? "" })}</div>
       </div>
     </div>
