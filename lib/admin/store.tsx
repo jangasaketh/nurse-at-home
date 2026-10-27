@@ -16,6 +16,7 @@ import {
 } from "./data";
 import * as link from "./link";
 import { db } from "@/lib/supabase";
+import { loadLive, type LiveData } from "./live";
 import { PATIENT_STORAGE_KEY, readPatient, type LivePatient } from "./patient-link";
 
 export type Decision = { status: "approved" | "sent-back"; tier?: Tier; step?: KycStep; reason?: string; at: number };
@@ -86,7 +87,7 @@ export type RenewalRow = Renewal & { member: MemberRow | null; decision: Renewal
 export type RefundRow = RefundRequest & { booking: AdminBooking | null; decision: RefundDecision | null };
 export type TicketRow = AdminTicket & { status: "open" | "resolved"; replies: { text: string; at: number }[] };
 
-function useView(state: AdminState, cg: CgState | null, patient: LivePatient | null, nowMs: number) {
+function useView(state: AdminState, cg: CgState | null, patient: LivePatient | null, nowMs: number, liveData: LiveData | null) {
   return useMemo(() => {
     const live = { applicant: link.liveApplicant(cg), member: link.liveMember(cg), renewal: link.liveRenewal(cg), tickets: link.liveTickets(cg), week: link.liveWeek(cg) };
 
@@ -137,6 +138,12 @@ function useView(state: AdminState, cg: CgState | null, patient: LivePatient | n
 
     const accounts: PatientAccount[] = [...(patient ? [patient.account] : []), ...sampleAccounts(nowMs)];
 
+    // Real team sign-in: verification and caregivers come from the database. Bookings, payouts and the other
+    // pages keep the sample caregivers until those parts are connected (phase 5).
+    const real = state.mode === "live" && liveData;
+    const roster: MemberRow[] = real ? liveData.members : members;
+    const rosterById = (id: string) => roster.find((m) => m.id === id) ?? null;
+
     /** Everything that happened to a caregiver: sample past events, what was done in this panel, and (live) what the app shows. */
     const historyOf = (id: string): HistoryEvent[] => {
       const m = memberById(id);
@@ -153,8 +160,18 @@ function useView(state: AdminState, cg: CgState | null, patient: LivePatient | n
       return [...base, ...fromApp, ...own].sort((a, b) => b.at - a.at);
     };
 
-    return { live, applicants, members, memberById, renewals, bookings, bookingById, refunds, tickets, accounts, patient, historyOf };
-  }, [state.applicantDecisions, state.memberEdits, state.renewalDecisions, state.bookingEdits, state.extraRefunds, state.refundDecisions, state.tickets, state.history, cg, patient, nowMs]);
+    if (real) {
+      return {
+        live, members, memberById, bookings, bookingById, refunds, tickets, accounts, patient,
+        applicants: liveData.applicants.map((a) => ({ ...a, decision: null })) as ApplicantRow[],
+        renewals: liveData.renewals.map((r) => ({ ...r, member: rosterById(r.memberId), decision: null })) as RenewalRow[],
+        roster, rosterById,
+        historyOf: (id: string) => (liveData.history[id] ?? []),
+        realData: liveData,
+      };
+    }
+    return { live, applicants, members, memberById, renewals, bookings, bookingById, refunds, tickets, accounts, patient, historyOf, roster, rosterById, realData: null as LiveData | null };
+  }, [liveData, state.mode, state.applicantDecisions, state.memberEdits, state.renewalDecisions, state.bookingEdits, state.extraRefunds, state.refundDecisions, state.tickets, state.history, cg, patient, nowMs]);
 }
 
 export type AdminView = ReturnType<typeof useView>;
@@ -175,6 +192,9 @@ type Ctx = {
   addHistory: (id: string, kind: HistoryKind, text: string) => void;
   /** Re-read the caregiver app after writing to it. */
   refreshCg: () => void;
+  /** Real team sign-in: re-read caregivers from the database (after a decision). */
+  refreshLive: () => Promise<void>;
+  liveError: string;
   resetDemo: () => void;
 };
 
@@ -185,6 +205,8 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [cg, setCg] = useState<CgState | null>(null);
   const [patient, setPatient] = useState<LivePatient | null>(null);
+  const [liveData, setLiveData] = useState<LiveData | null>(null);
+  const [liveError, setLiveError] = useState("");
   const [nowMs] = useState(() => Date.now());
 
   useEffect(() => {
@@ -245,14 +267,31 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     setCityNames(state.settings.cities);
   }
 
-  const view = useView(state, cg, patient, nowMs);
+  // Real team sign-in: load caregivers from the database, and again every minute while the panel is open.
+  const refreshLive = async () => {
+    try {
+      setLiveData(await loadLive());
+      setLiveError("");
+    } catch (e) {
+      setLiveError(e instanceof Error ? e.message : "Could not load from the database");
+    }
+  };
+  useEffect(() => {
+    if (!ready || !state.signedIn || state.mode !== "live") { setLiveData(null); return; }
+    void refreshLive();
+    const id = setInterval(() => { if (document.visibilityState === "visible") void refreshLive(); }, 60000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, state.signedIn, state.mode, state.userId]);
+
+  const view = useView(state, cg, patient, nowMs, liveData);
 
   const set = (patch: Partial<AdminState>) => setState((prev) => ({ ...prev, ...patch }));
   const update = (fn: (prev: AdminState) => Partial<AdminState>) => setState((prev) => ({ ...prev, ...fn(prev) }));
   const go = (page: AdminPage) => set({ page });
   const log = (text: string, page: AdminPage) => {
-    // Live: also written to the audit log in the database.
-    if (state.mode === "live" && state.userId) void db("admin").from("audit_log").insert({ actor: state.userId, page, action: "note", detail: { text } }).then(() => {}, () => {});
+    // Live: also written to the audit log in the database (verification decisions are logged by the database itself).
+    if (state.mode === "live" && state.userId && !["verification", "caregivers", "messages"].includes(page)) void db("admin").from("audit_log").insert({ actor: state.userId, page, action: "note", detail: { text } }).then(() => {}, () => {});
     setState((prev) => ({ ...prev, activity: [{ id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, at: Date.now(), text, page, by: prev.adminName }, ...prev.activity].slice(0, 300) }));
   };
   const addHistory = (id: string, kind: HistoryKind, text: string) =>
@@ -261,7 +300,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const resetDemo = () => setState((prev) => ({ ...initialState, signedIn: prev.signedIn, adminName: prev.adminName, adminEmail: prev.adminEmail, role: prev.role, page: prev.page }));
 
   return (
-    <AdminContext.Provider value={{ state, ready, nowMs, cg, view, set, update, go, log, addHistory, refreshCg, resetDemo }}>
+    <AdminContext.Provider value={{ state, ready, nowMs, cg, view, set, update, go, log, addHistory, refreshCg, refreshLive, liveError, resetDemo }}>
       {children}
     </AdminContext.Provider>
   );

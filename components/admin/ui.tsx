@@ -133,7 +133,13 @@ export function Doc({ file, label, extra }: { file: PhotoFile | null; label: str
           <img src={file.dataUrl} alt="" />
         </button>
       ) : (
-        <div className="none"><Icon name="file" size={24} />{file ? `PDF · ${file.name}. Opens after the server is connected.` : "Not sent"}</div>
+        <div className="none">
+          <Icon name="file" size={24} />
+          {!file ? "Not sent"
+            : file.kind === "pdf" && file.dataUrl ? <a className="alink" href={file.dataUrl} target="_blank" rel="noreferrer">Open the PDF ↗</a>
+            : file.path ? (file.kind === "pdf" ? "PDF · loading…" : "Loading…")
+            : `PDF · ${file.name}. Opens after the server is connected.`}
+        </div>
       )}
       <div className="cap"><span>{label}</span>{extra}</div>
       {open && file?.dataUrl && <PhotoViewer src={file.dataUrl} title={label} onClose={() => setOpen(false)} />}

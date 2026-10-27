@@ -6,6 +6,8 @@
 import { useEffect, useState } from "react";
 import { useCg, type CgNotice, type Ticket } from "@/lib/caregiver/store";
 import { REPORT_TOPICS } from "@/lib/caregiver/data";
+import { markNoticesRead, sendRenewal } from "@/lib/caregiver/sync";
+import { FileGone } from "@/lib/files";
 import { maskAccount, monthLabel, regStatus, weekStart } from "@/lib/caregiver/rules";
 import { dayInfo, money, msg, newId, timeAgo, tx } from "@/lib/booking";
 import { useAction, useLoad } from "@/lib/fake-api";
@@ -33,7 +35,10 @@ export function CgNotificationsScreen() {
   // Remember which were unread when the screen opened, so they stay highlighted while it is open.
   const [fresh] = useState(() => new Set(state.notices.filter((n) => !n.read).map((n) => n.id)));
   useEffect(() => {
-    if (load.status === "ready" && state.notices.some((n) => !n.read)) set({ notices: state.notices.map((n) => ({ ...n, read: true })) });
+    if (load.status === "ready" && state.notices.some((n) => !n.read)) {
+      if (state.mode === "live" && state.userId) void markNoticesRead(state.userId, state.notices.filter((n) => !n.read).map((n) => n.id)).catch(() => {});
+      set({ notices: state.notices.map((n) => ({ ...n, read: true })) });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load.status]);
 
@@ -389,10 +394,29 @@ export function RenewScreen() {
       ? t("The new date must be later than the current one.")
       : "";
 
-  const send = () => {
+  const live = state.mode === "live" && !!state.userId;
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState("");
+  const send = async () => {
     setTried(true);
+    setSendError("");
     if (!certificate || untilError) return;
-    // TODO: send the renewed certificate to the verification team (admin panel).
+    if (live) {
+      // Live: upload the certificate to private storage for the verification team.
+      setSending(true);
+      try {
+        const stored = await sendRenewal(state.userId!, certificate, validUntil);
+        update((prev) => ({
+          renewal: { certificate: stored, validUntil, at: Date.now() },
+          notices: [{ id: newId("n"), kind: "document", title: msg("Renewal sent"), body: msg("We are checking your renewed certificate. You can keep working meanwhile."), at: Date.now(), read: false, to: "renew" }, ...prev.notices],
+        }));
+      } catch (e) {
+        setSendError(e instanceof FileGone ? t("Add your PDF again: it was not kept when the page was reloaded.") : t("We could not send your documents. Check your internet and try again."));
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
     action.run(() => update((prev) => ({
       renewal: { certificate, validUntil, at: Date.now() },
       notices: [{ id: newId("n"), kind: "document", title: msg("Renewal sent"), body: msg("We are checking your renewed certificate. You can keep working meanwhile."), at: Date.now(), read: false, to: "renew" }, ...prev.notices],
@@ -421,9 +445,11 @@ export function RenewScreen() {
               <div className="strong">{t("Your renewed certificate is being checked")}</div>
               <div className="small">{t("New date: {month}. We will tell you when it is approved.", { month: monthLabel(state.renewal.validUntil) })}</div>
             </div>
-            <div className="dashed-box stack">
-              <button type="button" className="btn btn-demo" onClick={approve}>{t("Prototype: approve the renewal")}</button>
-            </div>
+            {!live && (
+              <div className="dashed-box stack">
+                <button type="button" className="btn btn-demo" onClick={approve}>{t("Prototype: approve the renewal")}</button>
+              </div>
+            )}
           </>
         ) : (
           <>
@@ -445,7 +471,8 @@ export function RenewScreen() {
       {!state.renewal && (
         <BottomBar>
           {action.failed && <ActionError />}
-          <button type="button" className="btn btn-primary" disabled={action.busy} onClick={send}>{action.busy ? t("Sending…") : t("Send for checking")}</button>
+          {sendError && <div role="alert" className="error">{sendError}</div>}
+          <button type="button" className="btn btn-primary" disabled={action.busy || sending} onClick={() => void send()}>{action.busy || sending ? t("Sending…") : t("Send for checking")}</button>
         </BottomBar>
       )}
     </div>

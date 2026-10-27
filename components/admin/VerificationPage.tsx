@@ -7,6 +7,8 @@ import { useAdmin, type ApplicantRow, type RenewalRow } from "@/lib/admin/store"
 import { KYC_STEPS, type KycStep } from "@/lib/caregiver/store";
 import { IFSC_RE, isAdult } from "@/lib/caregiver/rules";
 import * as link from "@/lib/admin/link";
+import * as live from "@/lib/admin/live";
+import { useEffect } from "react";
 import {
   ago, cityName, dateTime, daysUntilMonthEnd, monthText, REVIEW_CHECKS, SEND_BACK_REASONS, STEP_NAMES, TIER_TEXT, type Tier,
 } from "@/lib/admin/data";
@@ -37,16 +39,17 @@ export function VerificationPage() {
   const [renewalId, setRenewalId] = useState<string | null>(null);
 
   const waiting = view.applicants.filter((a) => a.live || !a.decision).sort((a, b) => a.submittedAt - b.submittedAt);
-  const sentBack = [
+  const real = view.realData;
+  const sentBack = real ? real.sentBack.map((x) => ({ ...x, live: false, db: true })) : [
     ...(cg?.kycStatus === "rejected" && cg.rejected ? [{ id: "live", name: cg.personal?.name || "New caregiver", cityId: cg.personal?.cityId ?? "hyd", step: cg.rejected.step, reason: cg.rejected.reason, at: state.applicantDecisions.live?.at ?? nowMs, live: true }] : []),
     ...view.applicants.filter((a) => !a.live && a.decision?.status === "sent-back").map((a) => ({ id: a.id, name: a.name, cityId: a.cityId, step: a.decision!.step!, reason: a.decision!.reason ?? "", at: a.decision!.at, live: false })),
   ];
-  const approved = [
+  const approved = real ? real.approved.map((x) => ({ ...x, live: false })) : [
     ...(state.applicantDecisions.live?.status === "approved" && view.live.member ? [{ id: "live", name: view.live.member.name, role: view.live.member.role, tier: view.live.member.tier, cityId: view.live.member.cityId, at: state.applicantDecisions.live.at, live: true }] : []),
     ...view.applicants.filter((a) => !a.live && a.decision?.status === "approved").map((a) => ({ id: a.id, name: a.name, role: a.role, tier: (a.role === "compounder" ? "basic" : a.decision!.tier ?? "full") as Tier, cityId: a.cityId, at: a.decision!.at, live: false })),
   ];
   const renewals = view.renewals.filter((r) => !r.decision);
-  const expiring = view.members.filter((m) => m.role === "nurse" && !m.suspended && (daysUntilMonthEnd(m.validUntil, nowMs) ?? 999) <= state.settings.renewalWarnDays && !renewals.some((r) => r.memberId === m.id))
+  const expiring = view.roster.filter((m) => m.role === "nurse" && !m.suspended && (daysUntilMonthEnd(m.validUntil, nowMs) ?? 999) <= state.settings.renewalWarnDays && !renewals.some((r) => r.memberId === m.id))
     .sort((a, b) => (daysUntilMonthEnd(a.validUntil, nowMs) ?? 0) - (daysUntilMonthEnd(b.validUntil, nowMs) ?? 0));
 
   const open = view.applicants.find((a) => a.id === openId && (a.live || !a.decision)) ?? null;
@@ -105,7 +108,7 @@ export function VerificationPage() {
                       <td>{STEP_NAMES[r.step]}</td>
                       <td className="adm-small">{r.reason}</td>
                       <td className="nowrap">{ago(r.at, nowMs)}</td>
-                      <td>{r.live ? <span className="adm-small adm-muted">Waiting for them to fix it in the app</span> : <ResendButton id={r.id} name={r.name} />}</td>
+                      <td>{r.live || real ? <span className="adm-small adm-muted">Waiting for them to fix it in the app</span> : <ResendButton id={r.id} name={r.name} />}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -206,9 +209,25 @@ function autoChecks(a: ApplicantRow, nowMs: number) {
   return list;
 }
 
+/** Real caregivers: the stored documents get 10-minute links so they can be seen. */
+function useDocLinks<T extends ApplicantRow["idPhoto"]>(files: T[], enabled: boolean): T[] {
+  const [out, setOut] = useState<T[]>(files);
+  const key = files.map((f) => f?.path ?? "").join("|");
+  useEffect(() => {
+    if (!enabled) { setOut(files); return; }
+    let gone = false;
+    void live.withLinks(files).then((f) => { if (!gone) setOut(f); });
+    return () => { gone = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, enabled]);
+  return out;
+}
+
 function ReviewDrawer({ a, onClose }: { a: ApplicantRow; onClose: () => void }) {
-  const { update, log, addHistory, refreshCg, nowMs } = useAdmin();
+  const { update, log, addHistory, refreshCg, refreshLive, nowMs } = useAdmin();
   const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [idPhoto, selfie, certificate] = useDocLinks([a.idPhoto, a.selfie, a.certificate], !!a.db);
   const [ticked, setTicked] = useState<Record<string, boolean>>({});
   const [mode, setMode] = useState<"approve" | "send-back" | null>(null);
   const [tier, setTier] = useState<Tier>("full");
@@ -225,6 +244,14 @@ function ReviewDrawer({ a, onClose }: { a: ApplicantRow; onClose: () => void }) 
     setTried(true);
     if (!allTicked) return;
     const t: Tier = a.role === "compounder" ? "basic" : tier;
+    if (a.db) {
+      setBusy(true);
+      live.approveCaregiver(a.id, t, allChecks.map((k) => k.split(":").slice(1).join(":")))
+        .then(async () => { log(`Approved ${a.name} (${roleText(a.role)}, ${TIER_TEXT[t].toLowerCase()})`, "verification"); await refreshLive(); toast(`${a.name} is approved. Their app shows it within a few seconds.`); onClose(); })
+        .catch((e: Error) => toast(`Could not approve: ${e.message}`))
+        .finally(() => setBusy(false));
+      return;
+    }
     if (a.live && !link.approveLive(t)) { toast("The caregiver app data could not be changed. Is storage blocked?"); return; }
     update((prev) => ({ applicantDecisions: { ...prev.applicantDecisions, [a.id]: { status: "approved", tier: t, at: Date.now() } } }));
     log(`Approved ${a.name} (${roleText(a.role)}, ${TIER_TEXT[t].toLowerCase()})`, "verification");
@@ -236,6 +263,14 @@ function ReviewDrawer({ a, onClose }: { a: ApplicantRow; onClose: () => void }) 
   const sendBack = () => {
     setTried(true);
     if (finalReason.length < 10) return;
+    if (a.db) {
+      setBusy(true);
+      live.sendBackCaregiver(a.id, step, finalReason)
+        .then(async () => { log(`Sent back ${a.name}'s ${STEP_NAMES[step].toLowerCase()}: “${finalReason}”`, "verification"); await refreshLive(); toast(`Sent back to ${a.name}`); onClose(); })
+        .catch((e: Error) => toast(`Could not send back: ${e.message}`))
+        .finally(() => setBusy(false));
+      return;
+    }
     if (a.live && !link.sendBackLive(step, finalReason)) { toast("The caregiver app data could not be changed. Is storage blocked?"); return; }
     update((prev) => ({ applicantDecisions: { ...prev.applicantDecisions, [a.id]: { status: "sent-back", step, reason: finalReason, at: Date.now() } } }));
     log(`Sent back ${a.name}'s ${STEP_NAMES[step].toLowerCase()}: “${finalReason}”`, "verification");
@@ -253,12 +288,12 @@ function ReviewDrawer({ a, onClose }: { a: ApplicantRow; onClose: () => void }) 
   ) : mode === "approve" ? (
     <>
       <button type="button" className="abtn" onClick={() => setMode(null)}>Cancel</button>
-      <button type="button" className="abtn abtn-primary" onClick={approve}>Approve {a.name.split(" ")[0]}</button>
+      <button type="button" className="abtn abtn-primary" onClick={approve} disabled={busy}>{busy ? "Saving…" : `Approve ${a.name.split(" ")[0]}`}</button>
     </>
   ) : (
     <>
       <button type="button" className="abtn" onClick={() => setMode(null)}>Cancel</button>
-      <button type="button" className="abtn abtn-danger" onClick={sendBack}>Send back</button>
+      <button type="button" className="abtn abtn-danger" onClick={sendBack} disabled={busy}>{busy ? "Saving…" : "Send back"}</button>
     </>
   );
 
@@ -270,9 +305,9 @@ function ReviewDrawer({ a, onClose }: { a: ApplicantRow; onClose: () => void }) 
       {a.notes.map((n) => <div key={n} className="anote">{n}</div>)}
 
       <div className="adocs">
-        <Doc file={a.idPhoto} label={`${a.idType} (last 4: ${a.idLast4 || "—"})`} />
-        <Doc file={a.selfie} label="Selfie" />
-        <Doc file={a.certificate} label={a.role === "nurse" ? "Registration certificate" : "Training certificate"} />
+        <Doc file={idPhoto} label={`${a.idType} (last 4: ${a.idLast4 || "—"})`} />
+        <Doc file={selfie} label="Selfie" />
+        <Doc file={certificate} label={a.role === "nurse" ? "Registration certificate" : "Training certificate"} />
       </div>
 
       <div className="agrid agrid-2" style={{ alignItems: "start" }}>
@@ -357,13 +392,20 @@ function ReviewDrawer({ a, onClose }: { a: ApplicantRow; onClose: () => void }) 
 /* ---------- Renewed registration ---------- */
 
 function RenewalDrawer({ r, onClose }: { r: RenewalRow; onClose: () => void }) {
-  const { update, log, addHistory, refreshCg, nowMs } = useAdmin();
+  const { update, log, addHistory, refreshCg, refreshLive, nowMs } = useAdmin();
   const toast = useToast();
+  const [certificate] = useDocLinks([r.certificate], !!r.db);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState(RENEWAL_REASONS[0]);
   const name = r.member?.name ?? "Nurse";
 
   const approve = () => {
+    if (r.db) {
+      live.reviewRenewal(r.id, true)
+        .then(async () => { log(`Approved ${name}'s renewed registration, valid until ${monthText(r.validUntil)}`, "verification"); await refreshLive(); toast(`${name}'s registration is renewed`); onClose(); })
+        .catch((e: Error) => toast(`Could not approve: ${e.message}`));
+      return;
+    }
     if (r.live && !link.approveRenewalLive()) { toast("The caregiver app data could not be changed."); return; }
     update((prev) => ({
       renewalDecisions: { ...prev.renewalDecisions, [r.id]: { status: "approved", at: Date.now() } },
@@ -376,6 +418,12 @@ function RenewalDrawer({ r, onClose }: { r: RenewalRow; onClose: () => void }) {
     onClose();
   };
   const reject = () => {
+    if (r.db) {
+      live.reviewRenewal(r.id, false, reason)
+        .then(async () => { log(`Sent back ${name}'s renewal: “${reason}”`, "verification"); await refreshLive(); toast(`Renewal sent back to ${name}`); onClose(); })
+        .catch((e: Error) => toast(`Could not send back: ${e.message}`));
+      return;
+    }
     if (r.live && !link.rejectRenewalLive(reason)) { toast("The caregiver app data could not be changed."); return; }
     update((prev) => ({ renewalDecisions: { ...prev.renewalDecisions, [r.id]: { status: "rejected", reason, at: Date.now() } } }));
     log(`Sent back ${name}'s renewal: “${reason}”`, "verification");
@@ -394,7 +442,7 @@ function RenewalDrawer({ r, onClose }: { r: RenewalRow; onClose: () => void }) {
       ) : (
         <><button type="button" className="abtn" onClick={() => setRejecting(true)}>Send back…</button><button type="button" className="abtn abtn-primary" onClick={approve}>Approve renewal</button></>
       )}>
-      <Doc file={r.certificate} label="Renewed certificate" />
+      <Doc file={certificate} label="Renewed certificate" />
       <dl className="akv">
         <dt>Council, reg. no.</dt><dd>{r.member?.council} · {r.member?.regNo}</dd>
         <dt>Valid until now</dt><dd>{monthText(r.member?.validUntil)}</dd>
@@ -413,10 +461,16 @@ function RenewalDrawer({ r, onClose }: { r: RenewalRow; onClose: () => void }) {
 /* ---------- Registrations about to lapse ---------- */
 
 function ExpiringList({ members }: { members: ReturnType<typeof useAdmin>["view"]["members"] }) {
-  const { state, update, log, addHistory, refreshCg, nowMs } = useAdmin();
+  const { state, update, log, addHistory, refreshCg, refreshLive, nowMs } = useAdmin();
   const toast = useToast();
-  const remind = (id: string, name: string, live?: boolean) => {
-    if (live) link.remindRenewalLive();
+  const remind = (id: string, name: string, isLive?: boolean) => {
+    if (state.mode === "live") {
+      live.remindRenewal(id)
+        .then(() => { update((prev) => ({ reminders: { ...prev.reminders, [id]: Date.now() } })); log(`Sent a renewal reminder to ${name}`, "verification"); void refreshLive(); toast(`Reminder sent to ${name}`); })
+        .catch((e: Error) => toast(`Could not send: ${e.message}`));
+      return;
+    }
+    if (isLive) link.remindRenewalLive();
     update((prev) => ({ reminders: { ...prev.reminders, [id]: Date.now() } }));
     log(`Sent a renewal reminder to ${name}`, "verification");
     addHistory(id, "reminder", "Registration expires soon");

@@ -5,6 +5,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { authProblem, db, intlPhone } from "@/lib/supabase";
 import { authMessage } from "../AuthScreens";
+import { sendForVerification } from "@/lib/caregiver/sync";
+import { FileGone } from "@/lib/files";
 import { approvalPatch, useCg, KYC_STEPS, type CgState, type KycStep, type Qualification } from "@/lib/caregiver/store";
 import { sampleValidUntil } from "@/lib/caregiver/engine";
 import { COMPOUNDER_TRAINING, ID_TYPES, NURSE_COURSES, servicesForRole, SPOKEN_LANGUAGES, type IdType } from "@/lib/caregiver/data";
@@ -200,11 +202,27 @@ export function KycScreen() {
     personal: "kyc-personal", id: "kyc-id", selfie: "kyc-selfie", qualification: "kyc-qualification", bank: "kyc-bank",
   };
 
-  const submit = () => {
+  const live = state.mode === "live" && !!state.userId;
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState("");
+  const submit = async () => {
     setTried(true);
+    setSendError("");
     if (!allDone || !state.agreed || needsFix) return;
-    // TODO: send the documents to the verification service (admin panel review).
-    action.run(() => set({ kycStatus: "submitted", rejected: null, screen: "review", trail: [] }));
+    if (!live) {
+      action.run(() => set({ kycStatus: "submitted", rejected: null, screen: "review", trail: [] }));
+      return;
+    }
+    // Live: upload the photos to private storage, save the details, and send to the verification team.
+    setSending(true);
+    try {
+      const sent = await sendForVerification(state.userId!, state);
+      set({ ...sent, kycStatus: "submitted", rejected: null, screen: "review", trail: [] });
+    } catch (e) {
+      setSendError(e instanceof FileGone ? t("Add your PDF again: it was not kept when the page was reloaded.") : t("We could not send your documents. Check your internet and try again."));
+    } finally {
+      setSending(false);
+    }
   };
 
   // Prototype only: fill whatever is missing with sample data and approve, so every caregiver screen can be tried.
@@ -241,11 +259,11 @@ export function KycScreen() {
             <span style={{ width: `${(done / KYC_STEPS.length) * 100}%` }} />
           </div>
         </div>
-        {/* Prototype only: there is no verification team yet. Remove before launch. */}
-        <div className="dashed-box stack-sm">
+        {/* Demo only: approve without a verification team. Remove before launch. */}
+        {!live && <div className="dashed-box stack-sm">
           <button type="button" className="btn btn-demo" onClick={skipVerification}>{t("Prototype: skip verification")}</button>
           <span className="small muted">{t("Fills sample details and documents for any step not done yet, and approves you straight away. Fill “Your details” first if you want your own name or city.")}</span>
-        </div>
+        </div>}
         {state.rejected && (
           <div className="danger-box stack-sm" role="alert">
             <div className="strong">{t("One document needs another look")}</div>
@@ -285,8 +303,9 @@ export function KycScreen() {
       </div>
       <BottomBar>
         {action.failed && <ActionError />}
-        <button type="button" className="btn btn-primary" disabled={action.busy} onClick={submit}>
-          {action.busy ? t("Sending…") : t("Send for verification")}
+        {sendError && <div role="alert" className="error">{sendError}</div>}
+        <button type="button" className="btn btn-primary" disabled={action.busy || sending} onClick={() => void submit()}>
+          {action.busy || sending ? (sending ? t("Sending your documents…") : t("Sending…")) : t("Send for verification")}
         </button>
       </BottomBar>
     </div>
@@ -638,10 +657,12 @@ export function ReviewScreen() {
         {/* Prototype: the admin panel (same browser) can check these documents. The buttons below stand in for it. Remove before launch. */}
         <div className="dashed-box stack">
           <a className="btn btn-outline" href={`${BASE}/admin/`} target="_blank" rel="noreferrer">{t("Prototype: check these documents in the admin panel")}</a>
-          <button type="button" className="btn btn-demo" onClick={() => update((prev) => approvalPatch(prev))}>{t("Prototype: approve me")}</button>
-          <button type="button" className="link-btn" onClick={() => set({ kycStatus: "rejected", rejected: { step: "id", reason: "The ID photo is blurred. Take it again in good light." } })}>
-            {t("Prototype: ask for a new ID photo")}
-          </button>
+          {state.mode !== "live" && <>
+            <button type="button" className="btn btn-demo" onClick={() => update((prev) => approvalPatch(prev))}>{t("Prototype: approve me")}</button>
+            <button type="button" className="link-btn" onClick={() => set({ kycStatus: "rejected", rejected: { step: "id", reason: "The ID photo is blurred. Take it again in good light." } })}>
+              {t("Prototype: ask for a new ID photo")}
+            </button>
+          </>}
         </div>
       </div>
     </div>

@@ -5,6 +5,8 @@
 import { useState } from "react";
 import { useAdmin, type MemberRow } from "@/lib/admin/store";
 import * as link from "@/lib/admin/link";
+import * as live from "@/lib/admin/live";
+import { useEffect } from "react";
 import {
   ago, cityName, dateOnly, dateTime, daysUntilMonthEnd, HISTORY_TEXT, monthText, sampleDocs, serviceName, STATUS_TEXT, TIER_TEXT, type HistoryKind, type Tier,
 } from "@/lib/admin/data";
@@ -27,7 +29,7 @@ export function CaregiversPage() {
   const [openId, setOpenId] = useState<string | null>(null);
 
   const warn = state.settings.renewalWarnDays;
-  const rows = view.members.filter((m) => {
+  const rows = view.roster.filter((m) => {
     const left = daysUntilMonthEnd(m.validUntil, nowMs);
     if (city !== "all" && m.cityId !== city) return false;
     if (role !== "all" && m.role !== role) return false;
@@ -38,11 +40,11 @@ export function CaregiversPage() {
     if (q && !`${m.name} ${m.phone} ${m.regNo}`.toLowerCase().includes(q.toLowerCase())) return false;
     return true;
   });
-  const open = view.members.find((m) => m.id === openId) ?? null;
+  const open = view.roster.find((m) => m.id === openId) ?? null;
 
   return (
     <>
-      <PageHead title="Caregivers" sub={`${view.members.length} verified caregivers. ${view.members.filter((m) => m.suspended).length} paused.`} />
+      <PageHead title="Caregivers" sub={`${view.roster.length} verified caregivers${view.realData ? " (from the database)" : ""}. ${view.roster.filter((m) => m.suspended).length} paused.`} />
       <div className="afilters">
         <Field id="cg-search" label="Search" value={q} onChange={setQ} placeholder="Name, phone or reg. no." />
         <Select id="cg-city" label="City" value={city} onChange={setCity} options={[{ value: "all", label: "All cities" }, ...state.settings.cities.map((c) => ({ value: c.id, label: c.name }))]} />
@@ -83,7 +85,7 @@ export function CaregiversPage() {
 }
 
 function MemberDrawer({ m, onClose }: { m: MemberRow; onClose: () => void }) {
-  const { view, update, log, addHistory, refreshCg, nowMs, state } = useAdmin();
+  const { view, update, log, addHistory, refreshCg, refreshLive, nowMs, state } = useAdmin();
   const toast = useToast();
   const [mode, setMode] = useState<"suspend" | "tier" | null>(null);
   const [reason, setReason] = useState(SUSPEND_REASONS[0]);
@@ -99,6 +101,12 @@ function MemberDrawer({ m, onClose }: { m: MemberRow; onClose: () => void }) {
   const suspend = () => {
     setTried(true);
     if (finalReason.length < 10) return;
+    if (m.db) {
+      live.pauseCaregiver(m.id, finalReason)
+        .then(async () => { log(`Paused ${m.name}: “${finalReason}”`, "caregivers"); await refreshLive(); toast(`${m.name} is paused and gets no requests`); setMode(null); })
+        .catch((e: Error) => toast(`Could not pause: ${e.message}`));
+      return;
+    }
     if (m.live) link.suspendLive(finalReason); else edit({ suspended: { reason: finalReason, at: Date.now() } });
     log(`Paused ${m.name}: “${finalReason}”`, "caregivers");
     addHistory(m.id, "paused", finalReason);
@@ -107,6 +115,12 @@ function MemberDrawer({ m, onClose }: { m: MemberRow; onClose: () => void }) {
     setMode(null);
   };
   const reinstate = () => {
+    if (m.db) {
+      live.pauseCaregiver(m.id, null)
+        .then(async () => { log(`Reinstated ${m.name}`, "caregivers"); await refreshLive(); toast(`${m.name} is active again`); })
+        .catch((e: Error) => toast(`Could not reinstate: ${e.message}`));
+      return;
+    }
     if (m.live) link.reinstateLive(); else edit({ suspended: null });
     log(`Reinstated ${m.name}`, "caregivers");
     addHistory(m.id, "reinstated", "Can take requests again");
@@ -114,6 +128,12 @@ function MemberDrawer({ m, onClose }: { m: MemberRow; onClose: () => void }) {
     toast(`${m.name} is active again`);
   };
   const saveTier = () => {
+    if (m.db) {
+      live.setTier(m.id, tier)
+        .then(async () => { log(`Changed what ${m.name} can take: ${TIER_TEXT[tier].toLowerCase()}`, "caregivers"); await refreshLive(); toast("Saved"); setMode(null); })
+        .catch((e: Error) => toast(`Could not save: ${e.message}`));
+      return;
+    }
     if (m.live) link.setTierLive(tier); else edit({ tier });
     log(`Changed what ${m.name} can take: ${TIER_TEXT[tier].toLowerCase()}`, "caregivers");
     addHistory(m.id, "tier", TIER_TEXT[tier]);
@@ -207,7 +227,18 @@ function MemberDrawer({ m, onClose }: { m: MemberRow; onClose: () => void }) {
 function MemberDocs({ m }: { m: MemberRow }) {
   const { cg, view } = useAdmin();
   const applicant = view.applicants.find((a) => a.id === m.id && !a.live);
-  const docs = m.live
+  const dbDocs = view.realData?.docs[m.id];
+  const [linked, setLinked] = useState<typeof dbDocs | null>(null);
+  useEffect(() => {
+    if (!m.db || !dbDocs) return;
+    let gone = false;
+    void live.withLinks([dbDocs.id, dbDocs.selfie, dbDocs.certificate, dbDocs.renewal]).then(([id, selfie, certificate, renewal]) => { if (!gone) setLinked({ id, selfie, certificate, renewal }); });
+    return () => { gone = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [m.id, m.db, view.realData?.loadedAt]);
+  const docs = m.db
+    ? (linked ?? dbDocs ?? { id: null, selfie: null, certificate: null, renewal: null })
+    : m.live
     ? { id: cg?.idProof?.photo ?? null, selfie: cg?.selfie ?? null, certificate: cg?.qualification?.certificate ?? null, renewal: cg?.renewal?.certificate ?? null }
     : applicant
       ? { id: applicant.idPhoto, selfie: applicant.selfie, certificate: applicant.certificate, renewal: null }

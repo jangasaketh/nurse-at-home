@@ -3,21 +3,24 @@
 // Photos are shrunk before they are kept (longest side 1600 px, JPEG), so a 5 MB camera photo becomes
 // about 200 to 400 KB. That keeps them small enough to save in the browser now, and quick to upload later.
 //
-// TODO (backend): upload the file to private storage (for example Supabase Storage) and keep only its id
-// here. Only the caregiver who takes the booking, and support, should be able to open it.
+// Uploading: caregivers' documents are uploaded to private storage when they are sent for checking
+// (lib/files.ts). A PDF is kept in memory until then, because it is too big to save in the browser.
 
 export type Prescription = {
   kind: "image" | "pdf";
   name: string;
   size: number; // bytes, after shrinking for photos
-  dataUrl: string | null; // the shrunk photo; null for a PDF until there is a server to upload it to
+  dataUrl: string | null; // the shrunk photo (or a short-lived link to the stored file); null for a PDF
   addedAt: number;
+  path?: string | null; // where it is in private storage, once uploaded
 };
 
 export const MAX_PHOTO_BYTES = 20 * 1024 * 1024;
 export const MAX_PDF_BYTES = 5 * 1024 * 1024;
 const LONG_SIDE = 1600;
 const MIN_SIDE = 300; // smaller than this and the handwriting cannot be read
+
+import { rememberFile } from "./files";
 
 export type PrescriptionError = "type" | "too-big" | "pdf-too-big" | "unreadable" | "small";
 
@@ -69,7 +72,9 @@ export async function preparePhoto(file: File, allowPdf: boolean): Promise<Photo
   if (isPdf(file)) {
     if (!allowPdf) throw new PrescriptionProblem("type");
     if (file.size > MAX_PDF_BYTES) throw new PrescriptionProblem("pdf-too-big");
-    return { kind: "pdf", name: file.name, size: file.size, dataUrl: null, addedAt: Date.now() };
+    const pdf: PhotoFile = { kind: "pdf", name: file.name, size: file.size, dataUrl: null, addedAt: Date.now() };
+    rememberFile(pdf, file);
+    return pdf;
   }
   if (!isImage(file)) throw new PrescriptionProblem("type");
   if (file.size > MAX_PHOTO_BYTES) throw new PrescriptionProblem("too-big");

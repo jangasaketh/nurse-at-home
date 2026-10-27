@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { useAdmin } from "@/lib/admin/store";
 import * as link from "@/lib/admin/link";
+import * as live from "@/lib/admin/live";
 import { ago, cityName, dateTime } from "@/lib/admin/data";
 import { Icon } from "../Icon";
 import { Badge, Empty, Field, PageHead, Select, useToast } from "./ui";
@@ -29,7 +30,7 @@ export function MessagesPage() {
   const [tried, setTried] = useState(false);
   const [confirm, setConfirm] = useState(false);
 
-  const recipients = view.members.filter((m) => !m.suspended && (cityId === "all" || m.cityId === cityId) && (role === "all" || m.role === role) && (!onlineOnly || m.online));
+  const recipients = view.roster.filter((m) => !m.suspended && (cityId === "all" || m.cityId === cityId) && (role === "all" || m.role === role) && (!onlineOnly || m.online));
   const errors = {
     title: title.trim().length < 3 ? "Write a short title." : title.length > 60 ? "Keep the title under 60 characters." : "",
     body: body.trim().length < 10 ? "Write the message, at least a sentence." : body.length > 300 ? "Keep the message under 300 characters." : "",
@@ -41,6 +42,18 @@ export function MessagesPage() {
     setTried(true);
     if (errors.title || errors.body || recipients.length === 0) return;
     if (!confirm) { setConfirm(true); return; }
+    if (state.mode === "live") {
+      // Real team sign-in: the database sends it to every matching caregiver.
+      live.sendBroadcast(title.trim(), body.trim(), cityId === "all" ? null : cityId, role === "all" ? null : role, onlineOnly)
+        .then((n) => {
+          update((prev) => ({ broadcasts: [{ id: `B-${3000 + prev.broadcasts.length}`, at: Date.now(), title: title.trim(), body: body.trim(), cityId, role, onlineOnly, recipients: n, by: prev.adminName }, ...prev.broadcasts] }));
+          log(`Sent “${title.trim()}” to ${n} caregivers (${lower(audience)})`, "messages");
+          toast(`Sent to ${n} ${n === 1 ? "caregiver" : "caregivers"}`);
+          setTitle(""); setBody(""); setTried(false); setConfirm(false);
+        })
+        .catch((e: Error) => toast(`Could not send: ${e.message}`));
+      return;
+    }
     const liveGets = recipients.some((m) => m.live);
     if (liveGets) link.messageLive(title.trim(), body.trim());
     update((prev) => ({

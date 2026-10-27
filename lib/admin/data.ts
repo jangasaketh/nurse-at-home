@@ -203,7 +203,8 @@ export const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday",
 
 export type Applicant = {
   id: string;
-  live?: boolean; // from the caregiver app in this browser
+  live?: boolean; // from the caregiver app in this browser (demo link)
+  db?: boolean; // a real caregiver from the database
   name: string;
   phone: string;
   role: Role;
@@ -287,6 +288,7 @@ export const TIER_TEXT: Record<Tier, string> = {
 export type Member = {
   id: string;
   live?: boolean;
+  db?: boolean; // a real caregiver from the database
   name: string;
   role: Role;
   tier: Tier;
@@ -332,7 +334,7 @@ export function sampleMembers(nowMs = Date.now()): Member[] {
 
 /* ---------- Renewed registrations waiting for checking ---------- */
 
-export type Renewal = { id: string; memberId: string; live?: boolean; validUntil: string; certificate: PhotoFile | null; sentAt: number };
+export type Renewal = { id: string; memberId: string; live?: boolean; db?: boolean; validUntil: string; certificate: PhotoFile | null; sentAt: number };
 
 export function sampleRenewals(members: Member[], nowMs = Date.now()): Renewal[] {
   const name = (id: string) => members.find((x) => x.id === id)?.name ?? "";

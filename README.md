@@ -12,7 +12,7 @@ Each app has its own colour (green for patients, blue for caregivers), its own h
 
 This is the **frontend only**. There is no server yet. Caregivers, patients, requests, prices, ratings and earnings are sample data. The patient and caregiver apps do not talk to each other yet: a booking made in the patient app does not appear in the caregiver app until there is a server. The admin panel is the exception, for the demo: it is linked to the caregiver app **in the same browser** (see "What to test: admin panel"), and the services list set in it (prices, switched-off services, new services) is used by both apps in that browser. It also shows the patient signed in to the patient app in that browser, read only. What a person enters (name, family, addresses, bookings) is saved in their own browser, so it survives a refresh on that device but is not shared with any other device. "Nurse at Home" is a placeholder name.
 
-**Current version: 1.1.0.** Real sign-in works (phase 2 of the backend): see "Sign-in" below and `supabase/README.md`. Each update gets the next number (1.0.1, 1.0.2, …). What changed in each version is in `CHANGELOG.md`. The version is set in `package.json` and is shown at the bottom of Profile in the app.
+**Current version: 1.2.0.** Real sign-in (phase 2) and real caregiver verification with documents in private storage (phases 3 and 4) work: see "Sign-in" below and `supabase/README.md`. Each update gets the next number (1.0.1, 1.0.2, …). What changed in each version is in `CHANGELOG.md`. The version is set in `package.json` and is shown at the bottom of Profile in the app.
 
 ## Reminder: the cancellation rule is provisional
 

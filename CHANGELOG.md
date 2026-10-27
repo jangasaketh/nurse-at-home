@@ -10,6 +10,20 @@ For every version, these all carry the same number:
 
 ---
 
+## 1.2.0 (27 Oct 2026)
+
+**Backend, phases 3 and 4: caregiver documents and real verification**
+- **Caregiver app (signed in):** "Send for verification" now uploads the photos and PDFs (ID, selfie, certificate, qualification, bank proof) to private storage and saves the details to the account. A short "Sending your documents…" shows while it works; if the internet drops, the documents stay on the phone and can be sent again. A PDF added before a page reload has to be added again (the app says so).
+- **The decision comes back by itself:** the app checks every 15 seconds (and when it is opened again) and shows approved, sent back (with the step to fix and the reason), paused or resumed, and new messages from the team. Fixing a sent-back step sends only that step again.
+- **Renewals:** a new registration certificate goes to the team for checking, and the answer comes back to the app.
+- **Admin panel (signed in):** Verification shows real applicants with their real photos and PDFs (private links that last a short time). Approve with a tier, or send back one step with a reason. The Caregivers page shows real caregivers: documents on file, history, pause and resume, change what they can take. Renewals can be approved, refused or reminded. Messages are sent to real caregivers (by city, role, online now).
+- **Safe in the database:** each decision is a database function that checks the person's role, writes the audit log and sends the caregiver a notice. Caregivers still cannot approve themselves or change their own tier.
+- `supabase/003_verification.sql`: the new database functions, to run once after 001 and 002.
+- New text in Telugu and Kannada (`lib/i18n/strings-11.ts`).
+- The demo works as before.
+
+---
+
 ## 1.1.0 (26 Oct 2026)
 
 **Backend, phase 2: real sign-in**

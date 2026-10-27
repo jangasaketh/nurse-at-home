@@ -5,7 +5,7 @@
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { db } from "@/lib/supabase";
-import { pullCaregiver, pushCaregiver, type CgSnapshot, type PulledCaregiver } from "./sync";
+import { pullCaregiver, pullDocs, pullNotices, pullStatus, pushCaregiver, type CgSnapshot, type PulledCaregiver, type PulledDocs } from "./sync";
 import { setLang, type Lang } from "@/lib/i18n";
 import type { Msg } from "@/lib/booking";
 import type { PhotoFile } from "@/lib/prescription";
@@ -270,6 +270,7 @@ export function CaregiverProvider({ children }: { children: ReactNode }) {
   // Live mode: refresh from the database when the app opens; save role, details and language when they change.
   const lastPushed = useRef<CgSnapshot | null>(null);
   const [synced, setSynced] = useState(false);
+  const seen = useRef<Set<string>>(new Set()); // team notifications already handled
   useEffect(() => {
     if (!ready || state.mode !== "live" || !state.userId || synced) return;
     let cancelled = false;
@@ -279,8 +280,9 @@ export function CaregiverProvider({ children }: { children: ReactNode }) {
       if (!data.session || data.session.user.id !== state.userId) { setState((prev) => ({ ...initialState, lang: prev.lang })); return; }
       try {
         const acc = await pullCaregiver(state.userId!);
+        const docs = acc.exists ? await pullDocs(state.userId!).catch(() => null) : null;
         if (cancelled) return;
-        setState((prev) => mergeCaregiver(prev, acc));
+        setState((prev) => mergeDocs(mergeCaregiver(prev, acc), docs));
         lastPushed.current = { lang: acc.lang, role: acc.role, personal: acc.personal };
       } catch {
         lastPushed.current = { lang: state.lang, role: state.role, personal: state.personal };
@@ -304,12 +306,45 @@ export function CaregiverProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapKey, ready, state.mode, state.userId, synced]);
 
+  // Live mode: the team's decisions (approve, send back, pause, services, renewal) and messages arrive by
+  // checking every 15 seconds and whenever the app comes back to the front.
+  useEffect(() => {
+    if (!ready || state.mode !== "live" || !state.userId || !synced) return;
+    const uid = state.userId;
+    let busy = false;
+    const check = async () => {
+      if (busy || document.visibilityState === "hidden") return;
+      busy = true;
+      try {
+        const [st, notices] = await Promise.all([pullStatus(uid), pullNotices(uid)]);
+        setState((prev) => mergeStatus(prev, st, notices));
+        // A renewal decision changes the registration date: read the documents again (once per notification).
+        const renewalNews = notices.filter((n) => !seen.current.has(n.id) && typeof n.title === "object" && "k" in n.title && /^(Registration renewed|Renewal not accepted)$/.test(n.title.k));
+        notices.forEach((n) => seen.current.add(n.id));
+        if (renewalNews.length) {
+          const docs = await pullDocs(uid).catch(() => null);
+          if (docs) setState((prev) => mergeDocs(prev, docs));
+        }
+      } catch {
+        // Offline: try again next time.
+      } finally {
+        busy = false;
+      }
+    };
+    const id = setInterval(check, 15000);
+    const onFocus = () => void check();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => { clearInterval(id); window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onFocus); };
+  }, [ready, state.mode, state.userId, synced]);
+
   const signedIn = async (userId: string) => {
     const acc = await pullCaregiver(userId);
+    const docs = acc.exists ? await pullDocs(userId).catch(() => null) : null;
     lastPushed.current = acc.exists ? { lang: acc.lang, role: acc.role, personal: acc.personal } : null;
     setSynced(true);
     setState((prev) => {
-      const merged = mergeCaregiver({ ...prev, mode: "live", userId }, acc);
+      const merged = mergeDocs(mergeCaregiver({ ...prev, mode: "live", userId }, acc), docs);
       const screen: CgScreen = merged.kycStatus === "approved" ? "jobs" : merged.kycStatus === "submitted" ? "review" : merged.role ? "kyc" : "role";
       return { ...merged, screen, trail: [] };
     });
@@ -408,12 +443,54 @@ function mergeCaregiver(prev: CgState, acc: PulledCaregiver): CgState {
     role: acc.role ?? prev.role,
     personal: acc.personal ?? prev.personal,
   };
-  // The verification decision comes from the database once the team decides there (phase 4).
-  if (acc.kycStatus === "approved" || acc.kycStatus === "rejected") {
+  // The verification status and decision come from the database (phases 3 and 4).
+  if (acc.kycStatus) {
     next.kycStatus = acc.kycStatus;
     next.tier = acc.tier;
     next.suspended = acc.suspended;
     next.rejected = acc.rejected;
   }
   return next;
+}
+
+/** Notifications from the team, merged with the phone's own (requests, expiry...). Read marks on the phone are kept. */
+function mergeNotices(local: CgNotice[], remote: CgNotice[]): CgNotice[] {
+  const byId = new Map(local.map((n) => [n.id, n]));
+  const merged = [...local];
+  for (const n of remote) {
+    const mine = byId.get(n.id);
+    if (mine) Object.assign(mine, { ...n, read: mine.read || n.read });
+    else merged.push(n);
+  }
+  return merged.sort((a, b) => b.at - a.at).slice(0, 80);
+}
+
+function mergeStatus(prev: CgState, st: Awaited<ReturnType<typeof pullStatus>>, notices: CgNotice[]): CgState {
+  const next: CgState = { ...prev, notices: mergeNotices(prev.notices, notices) };
+  if (st) {
+    next.kycStatus = st.kycStatus;
+    next.tier = st.tier;
+    next.rejected = st.rejected;
+    next.suspended = st.suspended;
+    if (st.suspended) next.online = false;
+  }
+  return JSON.stringify(next) === JSON.stringify(prev) ? prev : next;
+}
+
+/** Documents read back from the database. A photo taken on this phone and not sent yet is kept instead. */
+function mergeDocs(prev: CgState, docs: PulledDocs | null): CgState {
+  if (!docs) return prev;
+  const unsent = (p: { path?: string | null } | null | undefined) => !!p && !p.path;
+  const sentBack = (step: string) => prev.rejected?.step === step;
+  return {
+    ...prev,
+    idProof: unsent(prev.idProof?.photo) || sentBack("id") ? prev.idProof : docs.idProof ?? prev.idProof,
+    selfie: unsent(prev.selfie) || sentBack("selfie") ? prev.selfie : docs.selfie ?? prev.selfie,
+    qualification: !docs.qualification ? prev.qualification
+      : unsent(prev.qualification?.certificate) || sentBack("qualification") ? { ...docs.qualification, ...prev.qualification! }
+      : docs.qualification,
+    bank: sentBack("bank") ? prev.bank : docs.bank ?? prev.bank,
+    renewal: docs.renewal,
+    notices: mergeNotices(prev.notices, docs.notices),
+  };
 }
