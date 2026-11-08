@@ -1,18 +1,19 @@
 // Booking rules and helpers. No UI in this file.
 
 import {
-  CAREGIVERS, CITIES, FREE_UNTIL_HOURS, GRACE_MINUTES, ROUTINE_CHECK_IDS, SERVICES, SLOTS, TIMED_CANCEL_RULE,
+  CAREGIVERS, CITIES, FREE_UNTIL_HOURS, GRACE_MINUTES, LATE_MINUTES, ROUTINE_CHECK_IDS, SERVICES, SLOTS, TIMED_CANCEL_RULE,
   URGENT_FEE, URGENT_SLOT, VISIT_FEE, VITAL_CHECKS, VITALS_SERVICE_ID, type Caregiver, type City, type Service, SERVICE_CATALOG,
 } from "./data";
 import { getLang, t } from "./i18n";
 import type { Prescription } from "./prescription";
+import type { LiveCaregiver, LiveInfo } from "./patient-bookings";
 
 /* ---------- People, places, messages ---------- */
 
 export const SELF = "Me"; // relation value for the account holder
 
 export type Patient = { id: string; name: string; relation: string; age: number | null; gender: "F" | "M" | "" };
-export type Address = { id: string; label: string; line: string; area: string; cityId: string; pincode: string; landmark: string };
+export type Address = { id: string; label: string; line: string; area: string; cityId: string; pincode: string; landmark: string; lat?: number | null; lng?: number | null };
 export type Contact = { name: string; relation: string; phone: string };
 export type Notice = { id: string; title: Msg; body: Msg; at: number; read: boolean };
 
@@ -135,6 +136,7 @@ export type Booking = {
   notifyContact: boolean; // send visit updates to the emergency contact
   carried: number; // unpaid charge from an earlier booking, to be collected with this one
   prescription?: Prescription | null; // the nurse checks it at the door (missing on bookings saved before 1.0.1)
+  live?: LiveInfo; // live mode: what the server says (status, caregiver, arrival code, records)
 };
 
 export type VisitRecord = {
@@ -264,9 +266,50 @@ export function describeDraft(d: Draft) {
   };
 }
 
+/** A real caregiver (live mode) in the shape the screens use. Before anyone accepts, a placeholder. */
+export function listedFromLive(c: LiveCaregiver | null, service: Service, city: City): ListedCaregiver {
+  if (!c) {
+    const who = whoWord(service);
+    return {
+      id: "", name: who, first: who, initials: "…", qualification: "", isNurse: service.nurseOnly, experienceYears: 0, distance: "",
+      rating: "", visitCount: "0", speaks: [], gender: "F", regNo: "", busyAt: [], regLine: "",
+    };
+  }
+  const isNurse = c.role === "nurse";
+  const initials = c.name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");
+  return {
+    id: c.id, name: c.name, first: c.name.split(/\s+/)[0] ?? c.name, initials, isNurse,
+    qualification: isNurse ? (c.course ? `${t("Registered nurse")} · ${c.course}` : t("Registered nurse")) : (c.course ? `${t("Compounder")} · ${t(c.course)}` : t("Compounder")),
+    experienceYears: c.years, distance: "", rating: c.rating ? c.rating.toFixed(1) : t("New"), visitCount: String(c.visitsDone),
+    speaks: c.languages, gender: c.gender, regNo: c.regNo, busyAt: [],
+    regLine: isNurse
+      ? t("{state} nursing council reg. no. {no}", { state: t(c.council || city.state), no: c.regNo })
+      : t("Training certificate verified"),
+  };
+}
+
 export function describeBooking(b: Booking) {
   const service = serviceById(b.serviceId);
   const city = cityById(b.cityId);
+  if (b.live) {
+    const visitDate = addDays(b.startDate, (b.visitNo - 1) * b.everyDays);
+    const isCourse = b.visits > 1;
+    return {
+      service,
+      patient: describePatient(b.patient),
+      caregiver: listedFromLive(b.live.caregiver, service, city),
+      readings: readingsFor(service, b.vitalIds),
+      who: whoWord(service),
+      visitDate,
+      when: `${dayInfo(visitDate).full}, ${slotText(b.slot)}`,
+      nextWhen: `${dayInfo(addDays(visitDate, b.everyDays)).full}, ${slotText(b.slot)}`,
+      isCourse,
+      hasNext: isCourse && b.visitNo < b.visits,
+      remaining: b.visits - b.visitNo + 1,
+      visitLabel: t("Visit {n} of {total}", { n: b.visitNo, total: b.visits }),
+      planText: b.everyDays === 1 ? t("every day") : t("every 2 days"),
+    };
+  }
   // Later visits of an "any available" course still respect the patient's preferences.
   const preferred = caregiversFor(service, city).filter(
     (c) => (isFreeAt(c, b.slot) && matchesPreferences(c, b.womenOnly, b.language)) || c.id === b.caregiverId,
@@ -314,19 +357,30 @@ function slotMinutes(slot: string) {
   return ((Number(m[1]) % 12) + (m[3] === "PM" ? 12 : 0)) * 60 + Number(m[2]);
 }
 
+/** True if this arrival time today (dateIdx 0) is less than 30 minutes away or has passed. */
+export function slotPassed(dateIdx: number, slot: string, now = Date.now()) {
+  if (dateIdx > 0) return false;
+  const d = new Date(now);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime() + slotMinutes(slot) * 60000 < now + 30 * 60000;
+}
+
 /** When the next visit of this booking is due, in milliseconds. */
 export function visitTime(b: Booking) {
+  if (b.live?.due) return b.live.due;
   if (b.slot === URGENT_SLOT) return b.bookedAt + 60 * 60000;
   const day = fromISO(addDays(b.startDate, (b.visitNo - 1) * b.everyDays));
   return day.getTime() + slotMinutes(b.slot) * 60000;
 }
 
-export type FeeReason = "caregiver-late" | "grace" | "set-off" | "early" | "close";
+export type FeeReason = "caregiver-late" | "grace" | "set-off" | "early" | "close" | "no-caregiver";
 
 /** What it costs the patient to cancel or move the next visit right now, and why. */
 export function changeFee(b: Booking, step: number, now: number, caregiverLate: boolean): { fee: number; why: FeeReason } {
+  // Live mode: nobody has accepted yet, so nobody is holding the slot (the same rule as the server).
+  if (b.live && (b.live.status === "requested" || !b.live.caregiver)) return { fee: 0, why: "no-caregiver" };
   if (caregiverLate) return { fee: 0, why: "caregiver-late" };
-  if (TIMED_CANCEL_RULE && now - b.bookedAt <= GRACE_MINUTES * 60000) return { fee: 0, why: "grace" };
+  if (TIMED_CANCEL_RULE && now - b.bookedAt <= GRACE_MINUTES * 60000 && (!b.live || b.visitNo === 1)) return { fee: 0, why: "grace" };
   if (step >= 1) return { fee: VISIT_FEE, why: "set-off" };
   if (!TIMED_CANCEL_RULE || visitTime(b) - now > FREE_UNTIL_HOURS * 3600000) return { fee: 0, why: "early" };
   return { fee: VISIT_FEE, why: "close" };
@@ -336,6 +390,7 @@ export function changeFee(b: Booking, step: number, now: number, caregiverLate: 
 export function feeReasonText(why: FeeReason, who: string) {
   switch (why) {
     case "caregiver-late": return t("Free, because the {who} is running late.", { who });
+    case "no-caregiver": return t("Free, because no {who} has accepted yet.", { who });
     case "grace": return t("Free, because you booked less than {n} minutes ago.", { n: GRACE_MINUTES });
     case "early": return TIMED_CANCEL_RULE
       ? t("Free, because the visit is more than {n} hours away.", { n: FREE_UNTIL_HOURS })
@@ -373,4 +428,10 @@ export function cancelTerms(b: Booking, step: number, scope: "one" | "all", now:
 }
 
 /** A visit can move to another day or time until the caregiver sets off. Urgent visits cannot. */
-export const canReschedule = (b: Booking, step: number) => step === 0 && b.slot !== URGENT_SLOT;
+export const canReschedule = (b: Booking, step: number) => step <= 0 && b.slot !== URGENT_SLOT;
+
+/** Live mode: is the caregiver late enough that the patient may cancel for free? */
+export function liveLate(b: Booking, now = Date.now()) {
+  if (!b.live || !["accepted", "en_route"].includes(b.live.status)) return false;
+  return b.live.lateMinutes >= LATE_MINUTES || (b.live.due > 0 && now > b.live.due + LATE_MINUTES * 60000);
+}

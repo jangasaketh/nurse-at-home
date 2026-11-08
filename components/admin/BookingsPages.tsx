@@ -9,6 +9,8 @@ import {
   ago, cityName, DAY, dateTime, isPaidOut, money, moneyFor, serviceName, startOfToday, STATUS_TEXT, type AdminBooking, type BookingStatus,
 } from "@/lib/admin/data";
 import { Badge, Drawer, Empty, Field, PageHead, Select, Tabs, useToast, type Tone } from "./ui";
+import { LiveBookingsPage } from "./LiveBookingsPage";
+import { LiveRefundsPage } from "./LiveMoneyPages";
 
 const STATUS_TONE: Record<BookingStatus, Tone> = {
   upcoming: "info", "in-progress": "warn", completed: "ok", "cancelled-patient": "muted", "cancelled-caregiver": "danger", missed: "muted", "cancelled-admin": "muted",
@@ -26,6 +28,11 @@ function refunded(bookingId: string, refunds: RefundRow[]) {
 type When = "all" | "today" | "tomorrow" | "past";
 
 export function BookingsPage() {
+  const { state } = useAdmin();
+  return state.mode === "live" ? <LiveBookingsPage /> : <SampleBookingsPage />;
+}
+
+function SampleBookingsPage() {
   const { view, state } = useAdmin();
   const [when, setWhen] = useState<When>("all");
   const [status, setStatus] = useState<string>("all");
@@ -248,6 +255,11 @@ function ruleHint(r: RefundRow, freeHours: number) {
 }
 
 export function RefundsPage() {
+  const { state } = useAdmin();
+  return state.mode === "live" ? <LiveRefundsPage /> : <SampleRefundsPage />;
+}
+
+function SampleRefundsPage() {
   const { view, nowMs } = useAdmin();
   const [tab, setTab] = useState<"waiting" | "done">("waiting");
   const [openId, setOpenId] = useState<string | null>(null);

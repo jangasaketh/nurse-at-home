@@ -2,7 +2,9 @@
 
 // ADMIN PANEL: sign-in, side menu and the page switch. Served at /admin/ (see app/admin/page.tsx).
 
-import { useState } from "react";
+import { useDemoAllowed } from "@/lib/launch";
+import { useEffect, useState } from "react";
+import { loadDashboard, type LiveDashboard } from "@/lib/admin/live";
 import { AdminProvider, useAdmin } from "@/lib/admin/store";
 import { canOpen, ROLE_HELP, ROLE_PAGES, ROLE_TEXT, type AdminPage, type AdminRole } from "@/lib/admin/data";
 import { Icon, type IconName } from "../Icon";
@@ -52,6 +54,7 @@ function LoginPage() {
   };
   // Demo: the sample admin and sample team, with sample data. Nothing is saved to the database.
   const demo = (name: string, role: AdminRole, mail: string) => set({ signedIn: true, mode: "demo", userId: null, adminName: name, adminEmail: mail, role, page: "dashboard" });
+  const demoAllowed = useDemoAllowed("admin");
 
   // Real sign-in: the email and password of a login made in Supabase, for someone in the team list.
   const submit = async () => {
@@ -91,6 +94,7 @@ function LoginPage() {
         <Field id="adm-password" label="Password" type="password" value={password} onChange={setPassword} error={tried ? errors.password : ""} />
         {problem && <div className="anote danger" role="alert">{problem}</div>}
         <button type="submit" className="abtn abtn-primary" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
+        {demoAllowed && <>
         <hr className="adm-sep" />
         <div className="adm-col" style={{ gap: 8 }}>
           <span className="adm-strong">Try the demo (sample data)</span>
@@ -102,6 +106,7 @@ function LoginPage() {
             ))}
           </div>
         </div>
+        </>}
       </form>
     </main>
   );
@@ -153,8 +158,22 @@ function Page() {
   }
 }
 
+/** Signed in: the menu counts come from the database (every 30 seconds). */
+function useLiveCounts(on: boolean) {
+  const [d, setD] = useState<LiveDashboard | null>(null);
+  useEffect(() => {
+    if (!on) { setD(null); return; }
+    const read = () => loadDashboard().then(setD, () => {});
+    read();
+    const id = setInterval(() => { if (document.visibilityState !== "hidden") read(); }, 30000);
+    return () => clearInterval(id);
+  }, [on]);
+  return d;
+}
+
 function Shell() {
   const { state, ready, view, go, set } = useAdmin();
+  const live = useLiveCounts(state.signedIn && state.mode === "live");
   if (!ready) return <div className="adm-splash" role="status">Loading the admin panel…</div>;
   if (!state.signedIn) return <LoginPage />;
 
@@ -162,11 +181,9 @@ function Shell() {
   const refunds = view.refunds.filter((r) => !r.decision).length;
   const open = view.tickets.filter((tk) => tk.status === "open");
   const urgent = open.some((tk) => tk.urgent);
-  const counts: Partial<Record<AdminPage, { n: number; red?: boolean }>> = {
-    verification: { n: waiting },
-    refunds: { n: refunds },
-    support: { n: open.length, red: urgent },
-  };
+  const counts: Partial<Record<AdminPage, { n: number; red?: boolean }>> = state.mode === "live"
+    ? { verification: { n: live ? live.applicants + live.renewals : 0 }, refunds: { n: live?.refundsDue ?? 0 }, support: { n: live?.ticketsOpen ?? 0, red: !!live?.sosOpen } }
+    : { verification: { n: waiting }, refunds: { n: refunds }, support: { n: open.length, red: urgent } };
 
   return (
     <div className="adm">
@@ -206,7 +223,7 @@ function Shell() {
           <button type="button" className="abtn abtn-sm" onClick={() => { if (state.mode === "live") void db("admin").auth.signOut(); set({ signedIn: false, userId: null }); }}>Sign out</button>
         </header>
         <main className="adm-content">
-          {state.mode === "live" && <div className="anote info adm-small">Signed in with your real team account. The team list is from the database; the other pages still show sample data until the apps are connected (phases 3 to 5).</div>}
+          {state.mode === "live" && state.page === "dashboard" && <div className="anote info adm-small">Signed in with your real team account. Every page shows real data from the database.</div>}
           <Page />
         </main>
       </div>

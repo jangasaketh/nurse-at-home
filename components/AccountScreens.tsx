@@ -8,6 +8,8 @@ import { ADDRESS_LABELS, CITIES, RELATIONS } from "@/lib/data";
 import { SELF, cityById, formatAddress, newId, type Address, type Patient } from "@/lib/booking";
 import { t } from "@/lib/i18n";
 import { Icon } from "./Icon";
+import { MapBox } from "./MapBox";
+import { cityCentre, currentPosition, inIndia, type LatLng } from "@/lib/maps";
 import { BottomBar, Chip, EmptyState, Header, TextField } from "./ui";
 
 const digits = (value: string, max: number) => value.replace(/\D/g, "").slice(0, max);
@@ -190,7 +192,22 @@ export function AddressFormScreen() {
   const [cityId, setCityId] = useState(existing?.cityId ?? state.addresses[0]?.cityId ?? CITIES[0].id);
   const [pincode, setPincode] = useState(existing?.pincode ?? "");
   const [landmark, setLandmark] = useState(existing?.landmark ?? "");
+  const [pin, setPin] = useState<LatLng | null>(existing?.lat != null && existing?.lng != null ? { lat: existing.lat, lng: existing.lng } : null);
+  const [locating, setLocating] = useState(false);
+  const [locError, setLocError] = useState<string | null>(null);
   const [tried, setTried] = useState(false);
+  const useMyLocation = async () => {
+    setLocating(true); setLocError(null);
+    try {
+      const p = await currentPosition();
+      if (inIndia(p)) setPin(p); else setLocError(t("That location is outside India. Move the pin to the address instead."));
+    } catch (e) {
+      setLocError((e as Error).message === "denied"
+        ? t("Location is blocked for this site. Tap the map where the house is instead.")
+        : t("Could not find your location. Tap the map where the house is instead."));
+    }
+    setLocating(false);
+  };
 
   const errors = {
     label: !label ? t("Choose a name for this address.") : undefined,
@@ -211,6 +228,8 @@ export function AddressFormScreen() {
       cityId,
       pincode,
       landmark: landmark.trim(),
+      lat: pin?.lat ?? null,
+      lng: pin?.lng ?? null,
     };
     // TODO: save through the API, and check that we serve this PIN code.
     back({
@@ -250,6 +269,20 @@ export function AddressFormScreen() {
         <TextField id="address-area" label={t("Area or locality")} value={area} onChange={setArea} error={tried ? errors.area : undefined} placeholder={t("For example, {area}", { area: cityById(cityId).area })} autoComplete="address-level2" />
         <TextField id="address-pin" label={t("PIN code")} value={pincode} onChange={(v) => setPincode(digits(v, 6))} error={tried ? errors.pincode : undefined} inputMode="numeric" autoComplete="postal-code" />
         <TextField id="address-landmark" label={t("Landmark (optional)")} value={landmark} onChange={setLandmark} hint={t("Something that helps the nurse find the door.")} autoComplete="off" />
+
+        <div className="stack" style={{ gap: 8 }}>
+          <label id="map-label">{t("Pin the door on the map (optional)")}</label>
+          <span className="small muted">{t("Tap the map or drag the pin. The nurse gets exact directions.")}</span>
+          <MapBox pin={pin} centre={cityCentre(cityId)} onPin={(p) => { if (inIndia(p)) { setPin(p); setLocError(null); } }} label={t("Map of the address")} />
+          <div className="row-inline" style={{ gap: 8, flexWrap: "wrap" }}>
+            <button type="button" className="btn btn-outline btn-sm" onClick={useMyLocation} disabled={locating}>
+              <Icon name="pin" size={18} />{locating ? t("Finding you…") : t("Use my current location")}
+            </button>
+            {pin && <button type="button" className="btn btn-plain btn-sm" onClick={() => setPin(null)}>{t("Remove the pin")}</button>}
+          </div>
+          {pin && <span className="small ok-text" role="status">{t("Pin set")}</span>}
+          {locError && <span className="small error" role="alert">{locError}</span>}
+        </div>
 
         <div className="stack">
           <label id="label-label">{t("Save this address as")}</label>

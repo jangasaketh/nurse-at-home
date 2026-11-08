@@ -3,6 +3,7 @@
 // ADMIN: patient accounts. Look up a patient by name, phone or family member, and see their family,
 // addresses, bookings, complaints and refunds in one place.
 
+import { LivePatientsPage } from "./LivePages";
 import { useState } from "react";
 import { useAdmin } from "@/lib/admin/store";
 import { ago, cityName, dateOnly, dateTime, money, serviceName, type PatientAccount } from "@/lib/admin/data";
@@ -11,7 +12,7 @@ import { Badge, Drawer, Empty, Field, PageHead, Select } from "./ui";
 
 const LivePatientBadge = () => <Badge tone="live">Live · patient app</Badge>;
 
-export function PatientsPage() {
+function SamplePatientsPage() {
   const { view, state } = useAdmin();
   const [q, setQ] = useState("");
   const [city, setCity] = useState("all");
@@ -193,4 +194,10 @@ function PatientDrawer({ a, onClose }: { a: PatientAccount; onClose: () => void 
       {booking && <BookingDrawer b={booking} onClose={() => setBookingId(null)} />}
     </>
   );
+}
+
+/** Signed in: from the database (1.8.0). Demo: the sample page. */
+export function PatientsPage() {
+  const { state } = useAdmin();
+  return state.mode === "live" ? <LivePatientsPage /> : <SamplePatientsPage />;
 }

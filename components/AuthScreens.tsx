@@ -1,5 +1,6 @@
 "use client";
 
+import { useDemoAllowed } from "@/lib/launch";
 import { useEffect, useState, type FormEvent } from "react";
 import { useApp } from "@/lib/store";
 import { SELF } from "@/lib/booking";
@@ -47,6 +48,7 @@ export function LoginScreen() {
   };
   // The demo: sample data, any 6 digits work, nothing is saved to an account.
   const demo = () => set({ mode: "demo", userId: null, screen: "otp", trail: [] });
+  const demoAllowed = useDemoAllowed("patient");
 
   return (
     <form className="screen screen-white login" onSubmit={submit} noValidate>
@@ -77,7 +79,7 @@ export function LoginScreen() {
         {error && <div role="alert" className="error">{t("Enter a 10-digit mobile number.")}</div>}
         {problem && <div role="alert" className="error">{problem}</div>}
         <button type="submit" className="btn btn-primary" style={{ marginTop: 8 }} disabled={busy}>{busy ? t("Sending…") : t("Send OTP")}</button>
-        <button type="button" className="link-btn small" onClick={demo}>{t("Try the demo (sample data, no account)")}</button>
+        {demoAllowed && <button type="button" className="link-btn small" onClick={demo}>{t("Try the demo (sample data, no account)")}</button>}
       </div>
       <div className="spacer" />
       {/* The caregiver app lives on the same site, at /caregiver/. */}

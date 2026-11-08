@@ -2,6 +2,7 @@
 
 // ADMIN: monthly reports. Revenue, what caregivers earned, refunds and a GST summary, with a CSV download.
 
+import { LiveReportsPage } from "./LivePages";
 import { useMemo, useState } from "react";
 import { useAdmin } from "@/lib/admin/store";
 import {
@@ -11,7 +12,7 @@ import { Badge, csvRow, downloadText, PageHead, Stat } from "./ui";
 
 const compact = (n: number) => (Math.abs(n) >= 100000 ? `₹${(n / 100000).toFixed(1)}L` : Math.abs(n) >= 1000 ? `₹${(n / 1000).toFixed(1)}k` : `₹${Math.round(n)}`);
 
-export function ReportsPage() {
+function SampleReportsPage() {
   const { view, state, nowMs } = useAdmin();
   const s = state.settings;
 
@@ -175,4 +176,10 @@ export function ReportsPage() {
       </section>
     </>
   );
+}
+
+/** Signed in: from the database (1.8.0). Demo: the sample page. */
+export function ReportsPage() {
+  const { state } = useAdmin();
+  return state.mode === "live" ? <LiveReportsPage /> : <SampleReportsPage />;
 }

@@ -116,6 +116,9 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); ou
 .btn-demo { min-height: 50px; border: 1.5px dashed var(--muted); font-size: 16px; }
 .btn-warn { min-height: 48px; border: 1.5px solid #6b4e00; color: var(--warn-ink); background: var(--surface); font-size: 16px; }
 .link-btn { min-height: 44px; align-self: flex-start; font-weight: 600; color: var(--primary); text-decoration: underline; }
+.btn-sm { width: auto; min-height: 44px; font-size: 15px; padding: 0 14px; }
+.map-box { background: var(--surface-2, #eef2ef); border: 1px solid var(--line, #dfe5e2); }
+.map-box .leaflet-control-attribution { font-size: 10px; }
 .sos { min-height: 44px; padding: 0 16px; border-radius: 22px; background: var(--danger); color: #ffffff; font-weight: 600; }
 
 /* Selectable chips */

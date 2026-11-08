@@ -1,5 +1,7 @@
 "use client";
 
+import { LivePayoutsPage } from "./LiveMoneyPages";
+
 // ADMIN: weekly caregiver payouts, and cash that caregivers owe us.
 
 import { useState } from "react";
@@ -35,6 +37,11 @@ const people = (n: number) => `${n} ${n === 1 ? "caregiver" : "caregivers"}`;
 const utr = () => `UTR ${4130 + Math.floor(Math.random() * 9)}${Math.floor(1000 + Math.random() * 8999)} ${Math.floor(1000 + Math.random() * 8999)}`;
 
 export function PayoutsPage() {
+  const { state } = useAdmin();
+  return state.mode === "live" ? <LivePayoutsPage /> : <SamplePayoutsPage />;
+}
+
+function SamplePayoutsPage() {
   const ctx = useAdmin();
   const { view, state, update, log, refreshCg, nowMs } = ctx;
   const toast = useToast();

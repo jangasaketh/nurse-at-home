@@ -10,7 +10,8 @@ import { markNoticesRead, sendRenewal } from "@/lib/caregiver/sync";
 import { FileGone } from "@/lib/files";
 import { maskAccount, monthLabel, regStatus, weekStart } from "@/lib/caregiver/rules";
 import { dayInfo, money, msg, newId, timeAgo, tx } from "@/lib/booking";
-import { useAction, useLoad } from "@/lib/fake-api";
+import { useAction, useLoad, useServerAction } from "@/lib/fake-api";
+import { myTickets, sendTicket, type MyTicket } from "@/lib/support";
 import { t } from "@/lib/i18n";
 import type { PhotoFile } from "@/lib/prescription";
 import { Icon, Star, type IconName } from "../Icon";
@@ -136,7 +137,13 @@ export function RatingsScreen() {
 
 export function ReportScreen() {
   const { state, update, back } = useCg();
-  const action = useAction(false);
+  const demoAction = useAction(false);
+  const server = useServerAction();
+  const live = state.mode === "live" && !!state.userId;
+  const action = live ? { busy: server.busy, failed: server.failed } : demoAction;
+  const [mine, setMine] = useState<MyTicket[]>([]);
+  const loadMine = () => { if (live) myTickets("caregiver").then(setMine).catch(() => {}); };
+  useEffect(loadMine, [live]); // eslint-disable-line react-hooks/exhaustive-deps
   const [topic, setTopic] = useState<string | null>(null);
   const [visit, setVisit] = useState<string | null>(null);
   const [message, setMessage] = useState("");
@@ -149,8 +156,15 @@ export function ReportScreen() {
     setTried(true);
     if (!topic || message.trim().length < 10) return;
     const ticket: Ticket = { id: `T-${String(Math.floor(1000 + Math.random() * 9000))}`, topic, visit, message: message.trim(), photo, at: Date.now(), status: "open" };
-    // TODO: create a support ticket through the API (with the photo uploaded to private storage).
-    action.run(() => {
+    if (live) {
+      const text = visit ? `${message.trim()}\n\n(${visit})` : message.trim();
+      void server.run(() => sendTicket("caregiver", state.userId!, topic, text, { photo }), (code) => {
+        setSent({ ...ticket, id: code });
+        loadMine();
+      });
+      return;
+    }
+    demoAction.run(() => {
       update((prev) => ({
         tickets: [ticket, ...prev.tickets],
         notices: [{ id: newId("n"), kind: "support", title: msg("We got your report {id}", { id: ticket.id }), body: msg("Our support team will call you on +91 {phone}.", { phone: prev.phone }), at: Date.now(), read: false, to: "report" }, ...prev.notices],
@@ -202,7 +216,28 @@ export function ReportScreen() {
           </>
         )}
 
-        {state.tickets.length > 0 && (
+        {live && mine.length > 0 && (
+          <div className="stack">
+            <h2>{t("Your reports")}</h2>
+            <div className="list">
+              {mine.map((tk) => (
+                <div key={tk.id} className="list-row" style={{ alignItems: "flex-start" }}>
+                  <span className="stack-xs" style={{ flex: 1, minWidth: 0 }}>
+                    <span className="strong">{tk.code} · {t(tk.topic)}</span>
+                    <span className="small muted">{tk.message.length > 70 ? `${tk.message.slice(0, 70)}…` : tk.message}</span>
+                    <span className="tiny muted">{timeAgo(tk.at)}</span>
+                    {tk.replies.map((r, i) => (
+                      <span key={i} className="tint-box small" style={{ marginTop: 4 }}><span className="strong">{t("Reply from support")}: </span>{r.text}</span>
+                    ))}
+                  </span>
+                  <span className={`pill ${tk.status === "open" ? "pill-role" : "pill-ok"}`}>{tk.status === "open" ? t("Open") : t("Resolved")}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!live && state.tickets.length > 0 && (
           <div className="stack">
             <h2>{t("Your reports")}</h2>
             <div className="list">

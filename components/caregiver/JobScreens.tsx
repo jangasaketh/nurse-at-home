@@ -2,6 +2,7 @@
 
 // CAREGIVER APP: going online, new requests, and the details of one request or accepted visit.
 
+import { PushCard } from "../PushCard";
 import { useState } from "react";
 import { useCg } from "@/lib/caregiver/store";
 import { checksOf, DECLINE_REASONS, earningFor, isUrgent, serviceOf, slotHour, visitPrice, type Job } from "@/lib/caregiver/data";
@@ -9,7 +10,8 @@ import { clock, courseText, courseWho, directionsUrl, offerWindowMs, patientLine
 import { patientCancelPatch, useNow } from "@/lib/caregiver/engine";
 import { RegistrationBanner } from "./MoreScreens";
 import { money } from "@/lib/booking";
-import { useAction } from "@/lib/fake-api";
+import { useAction, useServerAction } from "@/lib/fake-api";
+import { acceptOffer, acceptProblem, declineOffer } from "@/lib/caregiver/work";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
 import { InstallCard } from "../InstallCard";
@@ -61,6 +63,8 @@ export function JobsScreen() {
           <span className="switch" aria-hidden="true"><span /></span>
         </button>
 
+        {state.online && <PushCard app="caregiver" userId={state.userId} lang={state.lang} live={state.mode === "live"} compact />}
+
         <RegistrationBanner />
 
         {activeJob && state.active && (
@@ -96,7 +100,7 @@ export function JobsScreen() {
                 action={
                   <div className="stack-sm" style={{ width: "100%" }}>
                     <button type="button" className="btn btn-outline" onClick={() => open("availability")}>{t("Work settings")}</button>
-                    <button type="button" className="link-btn small" style={{ alignSelf: "center" }} onClick={() => set({ requestIds: null, declined: [], expired: [], offers: {} })}>{t("Prototype: bring back the sample requests")}</button>
+                    {state.mode !== "live" && <button type="button" className="link-btn small" style={{ alignSelf: "center" }} onClick={() => set({ requestIds: null, declined: [], expired: [], offers: {} })}>{t("Prototype: bring back the sample requests")}</button>}
                   </div>
                 } />
             ) : (
@@ -139,7 +143,7 @@ function RequestCard({ job, left, onOpen }: { job: Job; left: number | null; onO
         </span>
       </span>
       <span className="meta muted">
-        <span className="row-inline" style={{ gap: 4 }}><Icon name="pin" size={16} />{job.area} · {t("{km} km away", { km: job.distanceKm })}</span>
+        <span className="row-inline" style={{ gap: 4 }}><Icon name="pin" size={16} />{job.distanceKm >= 0 ? `${job.area} · ${t("{km} km away", { km: job.distanceKm })}` : job.area}</span>
         <span>{patientLine(job)}</span>
       </span>
       {course && <span className="small strong">{course}</span>}
@@ -159,8 +163,10 @@ function RequestCard({ job, left, onOpen }: { job: Job; left: number | null; onO
 /* ---------- One request, or an accepted visit ---------- */
 
 export function JobScreen() {
-  const { state, update, open, back, go, jobById } = useCg();
+  const { state, update, open, back, go, jobById, refreshWork } = useCg();
   const action = useAction(false);
+  const server = useServerAction();
+  const live = state.mode === "live";
   const [declining, setDeclining] = useState(false);
   const [reason, setReason] = useState<string | null>(null);
   const [tried, setTried] = useState(false);
@@ -205,14 +211,24 @@ export function JobScreen() {
     if (!isUrgent(job) && state.upcoming.some((j) => j.dateOffset === job.dateOffset && j.slot === job.slot)) {
       return setClash(t("You already have a visit at this time."));
     }
-    // TODO: accept through the API. It must check nobody else took the request first.
+    if (live) {
+      // The server checks nobody else took the request first.
+      void server.run(() => acceptOffer(job.id), (mine) => {
+        update((prev) => ({ upcoming: sortJobs([...prev.upcoming.filter((j) => j.id !== mine.id), mine]), liveOffers: prev.liveOffers.filter((j) => j.id !== mine.id) }));
+      });
+      return;
+    }
     action.run(() => update((prev) => ({ upcoming: sortJobs([...prev.upcoming, job]) })));
   };
   const decline = () => {
     setTried(true);
     if (!reason) return;
+    if (live) void declineOffer(job.id, reason).catch(() => {});
     update((prev) => ({ declined: [...prev.declined, job.id], screen: "jobs", trail: [] }));
   };
+  const acceptError = server.failed
+    ? { taken: t("Another caregiver accepted this request first."), expired: t("This request ran out of time."), settings: t("This request no longer fits your work settings."), other: t("That did not go through. Check your internet connection and try again.") }[acceptProblem(server.error)]
+    : null;
   const startVisit = () =>
     open("visit", { active: { jobId: job.id, step: 0, late: 0, waitStartedAt: null, waitSkipped: false, checks: {} }, openJobId: job.id });
 
@@ -247,10 +263,11 @@ export function JobScreen() {
 
         <Rows items={[
           { k: t("Patient"), v: accepted ? `${job.patient.full}, ${job.patient.age}` : patientLine(job) },
-          { k: accepted ? t("Address") : t("Area"), v: accepted ? job.address : `${job.area} · ${t("{km} km away", { km: job.distanceKm })}` },
-          ...(accepted ? [{ k: t("Landmark"), v: t(job.landmark) }] : []),
-          { k: t("Speaks"), v: t(job.language) },
+          { k: accepted ? t("Address") : t("Area"), v: accepted ? job.address : job.distanceKm >= 0 ? `${job.area} · ${t("{km} km away", { km: job.distanceKm })}` : job.area },
+          ...(accepted && job.landmark ? [{ k: t("Landmark"), v: t(job.landmark) }] : []),
+          ...(job.language ? [{ k: t("Speaks"), v: t(job.language) }] : []),
           { k: t("Payment"), v: job.pay === "cash" ? t("Collect {amount} in cash or UPI", { amount: money(price.total) }) : t("Paid online") },
+          ...(job.code ? [{ k: t("Booking"), v: job.code }] : []),
         ]} />
 
         {accepted ? (
@@ -261,12 +278,14 @@ export function JobScreen() {
         ) : (
           <p className="small muted">{t("The full address and phone number are shown after you accept.")}</p>
         )}
-        {callNote && <p className="small muted">{t("Calls are switched off in the prototype. In the real app they go through us, so phone numbers stay private.")}</p>}
+        {callNote && <p className="small muted">{live ? t("Private calls through us are coming soon. If you cannot find the place, call our support team.") : t("Calls are switched off in the prototype. In the real app they go through us, so phone numbers stay private.")}</p>}
 
-        <div className="card stack-sm">
-          <span className="tiny muted strong">{t("From the patient")}</span>
-          <span>{t(job.note)}</span>
-        </div>
+        {job.note && (
+          <div className="card stack-sm">
+            <span className="tiny muted strong">{t("From the patient")}</span>
+            <span>{live ? job.note : t(job.note)}</span>
+          </div>
+        )}
 
         {checks.length > 0 && (
           <div className="card stack-sm">
@@ -306,6 +325,7 @@ export function JobScreen() {
 
       <BottomBar>
         {clash && <div role="alert" className="error" style={{ marginBottom: 10 }}>{clash}</div>}
+        {acceptError && <div role="alert" className="error" style={{ marginBottom: 10 }}>{acceptError}</div>}
         {action.failed && <ActionError />}
         {accepted ? (
           <div className="stack-sm">
@@ -319,7 +339,7 @@ export function JobScreen() {
             {!isActive && <button type="button" className="btn btn-plain" onClick={() => open("cancel-visit", { openJobId: job.id })}>{t("I cannot do this visit")}</button>}
             {!isActive && <button type="button" className="btn btn-plain" onClick={() => go("jobs")}>{t("Back to jobs")}</button>}
             {/* Prototype: stands in for the patient cancelling in their app. Remove before launch. */}
-            {!(isActive && (state.active?.step ?? 0) >= 3) && (
+            {!live && !(isActive && (state.active?.step ?? 0) >= 3) && (
               <button type="button" className="link-btn small" style={{ alignSelf: "center" }} onClick={() => update((prev) => patientCancelPatch(prev, job))}>{t("Prototype: the patient cancels")}</button>
             )}
           </div>
@@ -330,14 +350,17 @@ export function JobScreen() {
           </div>
         ) : (
           <div className="stack-sm">
-            <button type="button" className="btn btn-primary" disabled={action.busy} onClick={accept}>
-              {action.busy ? t("Accepting…") : t("Accept · earn {amount}", { amount: money(pay.total) })}
+            <button type="button" className="btn btn-primary" disabled={action.busy || server.busy} onClick={accept}>
+              {action.busy || server.busy ? t("Accepting…") : t("Accept · earn {amount}", { amount: money(pay.total) })}
             </button>
             <button type="button" className="btn btn-plain" onClick={() => setDeclining(true)}>{t("Decline")}</button>
-            <button type="button" className="link-btn small" style={{ alignSelf: "center" }}
+            {acceptError && server.failed && acceptProblem(server.error) !== "other" && (
+              <button type="button" className="btn btn-plain" onClick={() => { void refreshWork(); go("jobs"); }}>{t("Back to jobs")}</button>
+            )}
+            {!live && <button type="button" className="link-btn small" style={{ alignSelf: "center" }}
               onClick={() => update((prev) => ({ offers: { ...prev.offers, [job.id]: Date.now() - offerWindowMs(job) - 1000 } }))}>
               {t("Prototype: let the time run out")}
-            </button>
+            </button>}
           </div>
         )}
       </BottomBar>

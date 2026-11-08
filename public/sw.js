@@ -113,3 +113,78 @@ async function staleWhileRevalidate(req) {
     .catch(() => hit || Response.error());
   return hit || fresh;
 }
+
+// ---------------------------------------------------------------------------------------------------------
+// Notifications on the phone (1.6.0). The "push" Edge Function sends each notification here, even when the
+// app is closed. It arrives as a key and values ({"k": "{name} is on the way", "v": {"name": "Anjali"}}) and is
+// shown in the phone's language, using push-strings.json (built with the site).
+
+let pushWords = null;
+async function words() {
+  if (pushWords) return pushWords;
+  try {
+    const url = SCOPE + "push-strings.json";
+    let res = await fetch(url).catch(() => null);
+    if (res && res.ok) (await caches.open(CACHE)).put(url, res.clone());
+    else res = await caches.match(url);
+    pushWords = res ? await res.json() : {};
+  } catch {
+    pushWords = {};
+  }
+  return pushWords;
+}
+
+/** A saved message as text: a plain string, {k, v}, or {j: [...], s} (see lib/booking.ts). */
+function msgText(m, lang, table) {
+  if (m == null) return "";
+  if (typeof m === "string" || typeof m === "number") return String(m);
+  if (Array.isArray(m.j)) return m.j.map((x) => msgText(x, lang, table)).join(m.s || "");
+  if (typeof m.k === "string") {
+    const col = lang === "te" ? 0 : lang === "kn" ? 1 : -1;
+    let out = (col >= 0 && table[m.k] && table[m.k][col]) || m.k;
+    const v = m.v || {};
+    return out.replace(/\{(\w+)\}/g, (all, key) => (key in v ? msgText(v[key], lang, table) : all));
+  }
+  if (m.date) return m.date + (m.slot ? ", " + m.slot : "");
+  return "";
+}
+
+self.addEventListener("push", (event) => {
+  event.waitUntil(
+    (async () => {
+      let data = {};
+      try { data = event.data ? event.data.json() : {}; } catch { data = { title: event.data ? event.data.text() : "" }; }
+      const table = await words();
+      const caregiver = data.app === "caregiver";
+      const title = msgText(data.title, data.lang, table) || "Nurse at Home";
+      const body = msgText(data.body, data.lang, table);
+      const icon = SCOPE + (caregiver ? "caregiver/icons/icon-192.png" : "icons/icon-192.png");
+      await self.registration.showNotification(title, {
+        body, icon, badge: icon, tag: data.id || undefined, lang: data.lang || "en",
+        // A new request keeps ringing until it is looked at.
+        requireInteraction: data.kind === "request", renotify: !!data.id, vibrate: data.kind === "request" ? [300, 150, 300, 150, 300] : [200],
+        data: { url: SCOPE + (caregiver ? "caregiver/" : ""), target: data.target || null },
+      });
+    })(),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || SCOPE;
+  event.waitUntil(
+    (async () => {
+      const open = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      // Bring the app forward if it is already open (the caregiver app for caregiver notifications).
+      const caregiverUrl = url.endsWith("caregiver/");
+      for (const c of open) {
+        const isCaregiver = new URL(c.url).pathname.includes("/caregiver");
+        if (isCaregiver === caregiverUrl && "focus" in c) {
+          c.postMessage({ type: "notification-open", target: event.notification.data && event.notification.data.target });
+          return c.focus();
+        }
+      }
+      return self.clients.openWindow(url);
+    })(),
+  );
+});

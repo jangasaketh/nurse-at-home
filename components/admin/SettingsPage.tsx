@@ -3,18 +3,21 @@
 // ADMIN: services (prices, on/off, who can do them, prescription, new services), charges and cancellation rules,
 // pay split, time limits, cities and their areas.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAdmin } from "@/lib/admin/store";
 import { BUILT_IN_SERVICES, LOCKED_SERVICE_IDS, VITAL_CHECKS, VITALS_SERVICE_ID, type ServiceSetting } from "@/lib/data";
 import { DEFAULT_SETTINGS, money, WEEKDAYS, type Settings } from "@/lib/admin/data";
 import type { IconName } from "../Icon";
 import { Icon } from "../Icon";
+import { PushKeys } from "./PushKeys";
+import { LaunchPanel } from "./LaunchPanel";
 import { Badge, Field, PageHead, Select, Tabs, useToast } from "./ui";
 
-type Tab = "prices" | "rules" | "pay" | "limits" | "cities";
+type Tab = "prices" | "rules" | "pay" | "limits" | "cities" | "payments" | "notifications" | "maps" | "launch";
 
-const LIVE = <div className="anote ok adm-small"><b>Live in this demo.</b> The patient and caregiver apps use this list (prices, services switched off, who can do them, new services) when opened in this browser.</div>;
-const LATER = <div className="anote info adm-small"><b>Saved here.</b> The apps use these once the server is connected; until then they keep the built-in numbers.</div>;
+const DEMO_LIVE = <div className="anote ok adm-small"><b>Live in this demo.</b> The patient and caregiver apps use this list (prices, services switched off, who can do them, new services) when opened in this browser.</div>;
+const DEMO_LATER = <div className="anote info adm-small"><b>Saved here.</b> In the demo, the apps keep their built-in numbers. Signed in with a team account, these are saved to the server.</div>;
+const SERVER = <div className="anote ok adm-small"><b>Saved to the server.</b> New bookings use these at once. The patient and caregiver apps pick them up when they are opened, and every 5 minutes while open.</div>;
 
 const NUM_FIELDS: { key: keyof Settings; label: string; unit: string; min: number; max: number; tab: Tab; hint: string }[] = [
   { key: "visitFee", label: "Home visit charge", unit: "₹", min: 0, max: 1000, tab: "rules", hint: "Added to every visit. Kept when the patient cancels late or nobody is home." },
@@ -39,7 +42,11 @@ const DURATIONS = ["15 minutes", "20 minutes", "30 minutes", "40 minutes", "45 m
 const EMPTY_NEW = { name: "", short: "", price: "", mins: "30 minutes", icon: "heart" as IconName, nurseOnly: false, needsPrescription: false, nurseBrings: "", youKeepReady: "", includes: "" };
 
 export function SettingsPage() {
-  const { state, update, log } = useAdmin();
+  const { state, log, saveSettings, settingsFromServer } = useAdmin();
+  const live = state.mode === "live";
+  const LIVE = live ? SERVER : DEMO_LIVE;
+  const LATER = live ? SERVER : DEMO_LATER;
+  const [saving, setSaving] = useState(false);
   const toast = useToast();
   const [tab, setTab] = useState<Tab>("prices");
   const [draft, setDraft] = useState<Settings>(state.settings);
@@ -50,6 +57,15 @@ export function SettingsPage() {
   const [nsTried, setNsTried] = useState(false);
   const [adding, setAdding] = useState(false);
 
+  // When the settings arrive from the server (or are saved), show them, unless the owner is in the middle of changes.
+  const shown = useRef(state.settings);
+  const justSaved = useRef(false);
+  useEffect(() => {
+    if (justSaved.current || JSON.stringify(draft) === JSON.stringify(shown.current)) setDraft(state.settings);
+    justSaved.current = false;
+    shown.current = state.settings;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.settings]);
   const changed = JSON.stringify(draft) !== JSON.stringify(state.settings);
   const priceError = (n: number) => (!Number.isFinite(n) || n < 1 || n > 10000 ? "From ₹1 to ₹10,000." : "");
   const numError = (f: (typeof NUM_FIELDS)[number]) => {
@@ -83,6 +99,7 @@ export function SettingsPage() {
     for (const s of before.services) if (!draft.services.some((x) => x.id === s.id)) diffs.push(`Removed service ${s.name}`);
     for (const c of VITAL_CHECKS) if (draft.checks[c.id] !== before.checks[c.id]) diffs.push(`${c.name} ${money(before.checks[c.id])} → ${money(draft.checks[c.id])}`);
     for (const f of NUM_FIELDS) if (draft[f.key] !== before[f.key]) diffs.push(`${f.label}: ${before[f.key]} → ${draft[f.key]}`);
+    if (!!draft.paymentsOn !== !!before.paymentsOn) diffs.push(`Online payment switched ${draft.paymentsOn ? "on" : "off"}`);
     if (draft.payoutDay !== before.payoutDay) diffs.push(`Payout day: ${WEEKDAYS[before.payoutDay]} → ${WEEKDAYS[draft.payoutDay]}`);
     for (const c of draft.cities) {
       const old = before.cities.find((x) => x.id === c.id);
@@ -93,9 +110,15 @@ export function SettingsPage() {
       if (added.length) diffs.push(`${c.name}: added ${added.join(", ")}`);
       if (removed.length) diffs.push(`${c.name}: removed ${removed.join(", ")}`);
     }
-    update(() => ({ settings: draft }));
-    log(`Changed settings: ${diffs.join("; ") || "no changes"}`, "settings");
-    toast("Settings saved");
+    setSaving(true);
+    justSaved.current = true; // the settings read back after saving replace the draft
+    saveSettings(draft).then(() => {
+      log(`Changed settings: ${diffs.join("; ") || "no changes"}`, "settings");
+      toast(live ? "Settings saved to the server" : "Settings saved");
+    }, (e) => {
+      justSaved.current = false;
+      toast(`Not saved: ${(e as Error)?.message ?? "check the internet connection"}`);
+    }).finally(() => setSaving(false));
   };
   const setNum = (key: keyof Settings, v: string) => setDraft((d) => ({ ...d, [key]: v === "" ? NaN : Number(v) }));
   const numValue = (n: number) => (Number.isFinite(n) ? String(n) : "");
@@ -159,12 +182,73 @@ export function SettingsPage() {
       <PageHead title="Settings" sub="Services and prices, charges, the cancellation rule, the pay split, time limits, cities and areas. Every change is written to the activity log."
         actions={<>
           <button type="button" className="abtn" disabled={!changed} onClick={() => setDraft(state.settings)}>Discard changes</button>
-          <button type="button" className="abtn abtn-primary" disabled={!changed} onClick={save}>Save changes</button>
+          <button type="button" className="abtn abtn-primary" disabled={!changed || saving || (live && !settingsFromServer)} onClick={save}>{saving ? "Saving…" : "Save changes"}</button>
         </>} />
+      {live && !settingsFromServer && <div className="anote" role="status">Reading the settings from the server…</div>}
       {changed && <div className="anote" role="status">You have unsaved changes.</div>}
       <Tabs label="Settings sections" value={tab} onChange={setTab} tabs={[
         { id: "prices", label: "Services and prices" }, { id: "rules", label: "Charges and cancellation" }, { id: "pay", label: "Pay split" }, { id: "limits", label: "Time limits" }, { id: "cities", label: "Cities and areas" },
+        { id: "payments", label: "Payments" }, { id: "notifications", label: "Notifications and SMS" }, { id: "maps", label: "Maps and calls" }, { id: "launch", label: "Launch" },
       ]} />
+
+      {tab === "launch" && (
+        <section className="acard adm-col">
+          <h2>Ready for launch</h2>
+          <LaunchPanel />
+        </section>
+      )}
+
+      {tab === "maps" && (
+        <section className="acard adm-col" style={{ gap: 12 }}>
+          <h2>Maps</h2>
+          <p className="adm-small" style={{ margin: 0 }}>
+            Patients can pin the door of each address on a map (or use their phone&rsquo;s location). The caregiver&rsquo;s Directions then go to the pin,
+            and while the caregiver is on the way, the patient sees them on a map (their phone shares its position about every 30 seconds, only until they arrive).
+            Needs <code>supabase/007_maps_calls.sql</code>. The maps use OpenStreetMap, free and without a key; before many people use the app, choose a map tile
+            provider (for example MapTiler or Stadia Maps, both with free starting plans) and put its address in the deploy workflow as <code>NEXT_PUBLIC_MAP_TILES</code>.
+          </p>
+          <h2>Private calls</h2>
+          <p className="adm-small" style={{ margin: 0 }}>
+            The patient and the caregiver of a visit call each other through one company number, so neither sees the other&rsquo;s phone number.
+            Every call is logged. Until this is set up, the Call buttons say private calls are coming soon and point to support.
+          </p>
+          <ol className="adm-small" style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 8 }}>
+            <li><b>Exotel account</b> (exotel.com): complete their business KYC and buy an ExoPhone (a virtual number). Ask them to enable &ldquo;Click to call / Connect two numbers&rdquo;.</li>
+            <li><b>Run</b> <code>supabase/007_maps_calls.sql</code> (shows &ldquo;Maps and calls are ready&rdquo;).</li>
+            <li><b>Deploy the &ldquo;call&rdquo; Edge Function</b>: Edge Functions → Deploy a new function → Via editor → name <code>call</code> → paste <code>supabase/functions/call/index.ts</code> → Deploy, then switch <b>off</b> &ldquo;Verify JWT&rdquo;.</li>
+            <li><b>Secrets</b> (Edge Functions → Secrets): <code>EXOTEL_SID</code>, <code>EXOTEL_API_KEY</code>, <code>EXOTEL_API_TOKEN</code> (Exotel → Settings → API), <code>EXOTEL_CALLER_ID</code> (your ExoPhone) and <code>EXOTEL_SUBDOMAIN</code> (<code>api.exotel.com</code>, or <code>api.in.exotel.com</code> for a Mumbai-region account).</li>
+            <li><b>Test</b> with a visit that a caregiver has accepted: tap Call in either app. Exotel rings the person who tapped, then connects the other.</li>
+          </ol>
+        </section>
+      )}
+
+      {tab === "notifications" && (
+        <section className="acard adm-col">
+          <h2>Notifications on the phone</h2>
+          <PushKeys />
+        </section>
+      )}
+
+      {tab === "payments" && (
+        <section className="acard adm-col">
+          <h2>Online payment (UPI and card)</h2>
+          {live ? (
+            <>
+              <label className="adm-row" htmlFor="st-payments" style={{ gap: 10 }}>
+                <input id="st-payments" type="checkbox" style={{ width: 18, minHeight: 18 }} checked={!!draft.paymentsOn} onChange={(e) => setDraft((d) => ({ ...d, paymentsOn: e.target.checked }))} />
+                <span><b>Patients can pay online when they book</b> (Razorpay: UPI, cards, net banking). The request goes to caregivers once the payment has gone through. &ldquo;Pay after the visit&rdquo; stays available.</span>
+              </label>
+              <div className="anote info adm-small">
+                <b>Before switching on:</b> the &ldquo;payments&rdquo; Edge Function must be deployed in Supabase with the Razorpay keys in its secrets
+                (RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET), and <code>supabase/005_payments.sql</code> run. Use Razorpay&rsquo;s test keys first:
+                test payments move no money. Switch to the live keys only after Razorpay has approved the business.
+              </div>
+            </>
+          ) : (
+            <div className="anote info adm-small">Sign in with a team account to switch online payment on. The demo always pays after the visit.</div>
+          )}
+        </section>
+      )}
 
       {tab === "prices" && (
         <section className="acard">

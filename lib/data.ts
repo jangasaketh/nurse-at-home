@@ -165,11 +165,11 @@ export const CITIES: City[] = [
   { id: "trv", name: "Thiruvananthapuram", state: "Kerala", language: "Malayalam", area: "Kowdiar" },
 ];
 
-export const VISIT_FEE = 49; // home visit charge per visit, rupees
+export let VISIT_FEE = 49; // home visit charge per visit, rupees (live mode: from the server settings)
 // Early-morning and late-night slots are on purpose: insulin before breakfast, night-time injections.
 export const SLOTS = ["6:00 AM", "9:00 AM", "12:00 PM", "4:00 PM", "7:00 PM", "10:00 PM"];
 export const URGENT_SLOT = "within 60 minutes";
-export const URGENT_FEE = 100; // extra charge for "As soon as possible", rupees
+export let URGENT_FEE = 100; // extra charge for "As soon as possible", rupees (live mode: from the server settings)
 export const VISIT_COUNTS = [3, 5, 7, 10, 14];
 export const ARRIVAL_CODE = "4821";
 
@@ -247,11 +247,29 @@ export const ROUTINE_CHECK_IDS = ["bp", "pulse", "temp", "spo2"];
 // PROVISIONAL RULE, applied 6 Oct 2026. The owner may change or remove it.
 // To go back to the simple rule ("free until the nurse sets off, then the home visit charge is kept"),
 // set TIMED_CANCEL_RULE to false. Nothing else needs to change. Then update the FAQ answer below to match.
-export const TIMED_CANCEL_RULE = true;
-export const GRACE_MINUTES = 5; // free to cancel this long after booking, whatever the visit time
-export const FREE_UNTIL_HOURS = 2; // free to cancel or move a visit until this long before it starts
-export const LATE_MINUTES = 30; // if the caregiver is later than this, cancelling is free
-export const NO_SHOW_MINUTES = 10; // caregiver waits this long at the door before the visit counts as missed
+// From 1.4.0 these are the starting values: signed-in apps take the numbers set in the admin panel (Settings),
+// read from the server's settings table (see lib/settings-sync.ts and setRules below).
+export let TIMED_CANCEL_RULE = true;
+export let GRACE_MINUTES = 5; // free to cancel this long after booking, whatever the visit time
+export let FREE_UNTIL_HOURS = 2; // free to cancel or move a visit until this long before it starts
+export let LATE_MINUTES = 30; // if the caregiver is later than this, cancelling is free
+export let NO_SHOW_MINUTES = 10; // caregiver waits this long at the door before the visit counts as missed
+
+// Online payment (UPI and card through Razorpay). Off until the owner switches it on in the admin panel.
+export let PAYMENTS_ON = false;
+export const setPaymentsOn = (on: boolean) => { PAYMENTS_ON = on; };
+
+/** Charges and the cancellation rule, from the server's settings (live mode). Missing numbers keep their value. */
+export function setRules(r: Partial<{ visitFee: number; urgentFee: number; timed: boolean; graceMinutes: number; freeUntilHours: number; lateMinutes: number; noShowMinutes: number }>) {
+  const n = (v: unknown, keep: number) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : keep);
+  VISIT_FEE = n(r.visitFee, VISIT_FEE);
+  URGENT_FEE = n(r.urgentFee, URGENT_FEE);
+  if (typeof r.timed === "boolean") TIMED_CANCEL_RULE = r.timed;
+  GRACE_MINUTES = n(r.graceMinutes, GRACE_MINUTES);
+  FREE_UNTIL_HOURS = n(r.freeUntilHours, FREE_UNTIL_HOURS);
+  LATE_MINUTES = n(r.lateMinutes, LATE_MINUTES);
+  NO_SHOW_MINUTES = n(r.noShowMinutes, NO_SHOW_MINUTES);
+}
 
 // ---------- Account, bookings and support ----------
 
@@ -292,21 +310,24 @@ export const FAQ = [
   {
     // PROVISIONAL RULE: matches changeFee() in lib/booking.ts and the settings above. Change them together.
     q: "Can I cancel or change a booking?",
-    a: "Yes, from the Bookings tab. It is free within 5 minutes of booking, and any time up to 2 hours before the visit. After that, or once the nurse has set off, the home visit charge is kept and paid to the nurse. We never keep more than that. Once care has started the visit cannot be cancelled. If the patient was hospitalised or got worse, tell support and we will waive the charge.",
+    a: "Yes, from the Bookings tab. It is free within {grace} minutes of booking, and any time up to {hours} hours before the visit. After that, or once the nurse has set off, the home visit charge is kept and paid to the nurse. We never keep more than that. Once care has started the visit cannot be cancelled. If the patient was hospitalised or got worse, tell support and we will waive the charge.",
   },
   {
     q: "What if the nurse is late or does not come?",
-    a: "If the nurse is more than 30 minutes late, or has to cancel, you can cancel free of charge and you get a full refund.",
+    a: "If the nurse is more than {late} minutes late, or has to cancel, you can cancel free of charge and you get a full refund.",
   },
   {
     q: "What if nobody is home when the nurse arrives?",
-    a: "The nurse waits 10 minutes at the door and tries to call. After that the visit counts as missed and the home visit charge is kept.",
+    a: "The nurse waits {wait} minutes at the door and tries to call. After that the visit counts as missed and the home visit charge is kept.",
   },
   {
     q: "Is this for emergencies?",
     a: "No. For chest pain, heavy bleeding, trouble breathing or signs of a stroke, call 112.",
   },
 ];
+
+/** The numbers in the FAQ answers (they follow the settings). */
+export const faqVars = () => ({ grace: GRACE_MINUTES, hours: FREE_UNTIL_HOURS, late: LATE_MINUTES, wait: NO_SHOW_MINUTES });
 
 // PLACEHOLDER legal pages. A lawyer must write the real text. These are only the headings to cover.
 export const LEGAL = {

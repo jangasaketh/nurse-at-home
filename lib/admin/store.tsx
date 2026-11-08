@@ -5,7 +5,8 @@
 // The caregiver in the caregiver app (same browser) is read live and changed through lib/admin/link.ts.
 // When the backend exists, replace the load/save here and the actions with API calls.
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { pullSettings, pushSettings, type ServerSettings } from "@/lib/settings-sync";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ADMIN_STORAGE_KEY, applyServices, servicesFromPrices } from "@/lib/data";
 import { CG_STORAGE_KEY, type CgState, type KycStep } from "@/lib/caregiver/store";
 import {
@@ -196,6 +197,10 @@ type Ctx = {
   refreshLive: () => Promise<void>;
   liveError: string;
   resetDemo: () => void;
+  /** Save the Settings page. Live: to the database (owners only), then read back. Demo: in this browser. */
+  saveSettings: (next: Settings) => Promise<void>;
+  /** Live: the settings were read from the database (false until then, or if reading failed). */
+  settingsFromServer: boolean;
 };
 
 const AdminContext = createContext<Ctx | null>(null);
@@ -207,6 +212,8 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const [patient, setPatient] = useState<LivePatient | null>(null);
   const [liveData, setLiveData] = useState<LiveData | null>(null);
   const [liveError, setLiveError] = useState("");
+  const serverSettings = useRef<ServerSettings | null>(null);
+  const [settingsFromServer, setSettingsFromServer] = useState(false);
   const [nowMs] = useState(() => Date.now());
 
   useEffect(() => {
@@ -284,6 +291,28 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, state.signedIn, state.mode, state.userId]);
 
+  // Live: the settings come from the database, so every app uses the same prices and rules.
+  const loadSettings = async () => {
+    const st = await pullSettings(db("admin"));
+    serverSettings.current = st;
+    setSettingsFromServer(true);
+    setState((prev) => ({ ...prev, settings: fromServer(st, prev.settings) }));
+  };
+  useEffect(() => {
+    if (!ready || !state.signedIn || state.mode !== "live") { setSettingsFromServer(false); return; }
+    void loadSettings().catch(() => setSettingsFromServer(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, state.signedIn, state.mode, state.userId]);
+  const saveSettings = async (next: Settings) => {
+    if (state.mode === "live") {
+      if (!serverSettings.current) await loadSettings();
+      await pushSettings(db("admin"), state.userId!, serverSettings.current!, toServer(next, serverSettings.current!));
+      await loadSettings();
+      return;
+    }
+    setState((prev) => ({ ...prev, settings: next }));
+  };
+
   const view = useView(state, cg, patient, nowMs, liveData);
 
   const set = (patch: Partial<AdminState>) => setState((prev) => ({ ...prev, ...patch }));
@@ -300,7 +329,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const resetDemo = () => setState((prev) => ({ ...initialState, signedIn: prev.signedIn, adminName: prev.adminName, adminEmail: prev.adminEmail, role: prev.role, page: prev.page }));
 
   return (
-    <AdminContext.Provider value={{ state, ready, nowMs, cg, view, set, update, go, log, addHistory, refreshCg, refreshLive, liveError, resetDemo }}>
+    <AdminContext.Provider value={{ state, ready, nowMs, cg, view, set, update, go, log, addHistory, refreshCg, refreshLive, liveError, resetDemo, saveSettings, settingsFromServer }}>
       {children}
     </AdminContext.Provider>
   );
@@ -313,3 +342,25 @@ export function useAdmin() {
 }
 
 export const currentWeekKey = (nowMs: number) => weekKey(mondayOf(nowMs));
+
+/** The admin panel's settings from the server's (the panel's own shape). */
+function fromServer(st: ServerSettings, prev: Settings): Settings {
+  return {
+    ...prev,
+    services: st.services.length ? st.services : prev.services,
+    checks: { ...prev.checks, ...st.checks },
+    visitFee: st.visitFee, urgentFee: st.urgentFee, graceMinutes: st.graceMinutes, freeUntilHours: st.freeUntilHours,
+    lateMinutes: st.lateMinutes, noShowMinutes: st.noShowMinutes, caregiverShare: st.caregiverShare, visitFeeShare: st.visitFeeShare,
+    urgentShare: st.urgentShare, payoutDay: st.payoutDay, offerMinutes: st.offerMinutes, offerMinutesUrgent: st.offerMinutesUrgent,
+    renewalWarnDays: st.renewalWarnDays, cities: st.cities.length ? st.cities : prev.cities, paymentsOn: st.paymentsOn,
+  };
+}
+
+function toServer(s: Settings, base: ServerSettings): ServerSettings {
+  return {
+    services: s.services, checks: s.checks, visitFee: s.visitFee, urgentFee: s.urgentFee, timed: base.timed, graceMinutes: s.graceMinutes,
+    freeUntilHours: s.freeUntilHours, lateMinutes: s.lateMinutes, noShowMinutes: s.noShowMinutes, caregiverShare: s.caregiverShare,
+    visitFeeShare: s.visitFeeShare, urgentShare: s.urgentShare, payoutDay: s.payoutDay, offerMinutes: s.offerMinutes,
+    offerMinutesUrgent: s.offerMinutesUrgent, renewalWarnDays: s.renewalWarnDays, cities: s.cities, paymentsOn: !!s.paymentsOn,
+  };
+}

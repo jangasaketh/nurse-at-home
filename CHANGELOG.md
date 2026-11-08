@@ -10,6 +10,83 @@ For every version, these all carry the same number:
 
 ---
 
+## 1.8.0 (7 Nov 2026)
+
+**Launch cleanup: everything real when signed in**
+- **Support for real:** "Report a problem" (patient Help, caregiver Report a problem, with a photo) goes to the team's Support page. The team replies and resolves there; the person gets a notification (and a phone push) and sees the reply in the app.
+- **SOS for real:** pressing SOS during a visit (both apps) sends an urgent report to the support team at once, with the visit, the phone number and a map link to where the phone is. The admin panel shows SOS at the top of the Dashboard and Support, in red.
+- **Admin panel, signed in, all real:** Dashboard (visits today, earned today and this week, waiting requests, online caregivers, a to-do list), Patients (search, family, addresses, bookings, reports, refunds; opening an account is logged), Support, Reports (6 months, caregiver earnings, what we keep, refunds, GST estimate, CSV) and the Activity log (from the database, with who did what). Menu counts come from the database.
+- **"Try the demo" switch:** Settings → Launch hides or shows the demo link on all three login screens, without a new version.
+- **Go-live checklist:** Settings → Launch checks the database parts, push keys, online payment and the three server programs by itself, and lists what must be done outside the app.
+- **No prototype tools when signed in:** the "Prototype tools" box in Profile shows only in the demo.
+- Next.js updated to 16.4.3 (security fixes). `supabase/008_launch.sql`. New Telugu and Kannada text (`lib/i18n/strings-17.ts`).
+
+---
+
+## 1.7.0 (7 Nov 2026)
+
+**Backend, phase 9: maps and private calls**
+- **Pin the door:** when adding or changing an address, the patient can tap the map, drag the pin, or use the phone's current location. The pin is saved to the account (only places in India are accepted).
+- **Directions to the pin:** the caregiver's Directions button opens Google Maps to the exact pin (or the written address if there is no pin). On the way, the caregiver sees a map with the home and where they are, and the distance.
+- **"Where is my nurse?":** while the caregiver is on the way or at the door, their phone shares its position about every 30 seconds, and the patient sees it on a map with the distance. Only that patient can see it, only a recent position is shown, and it is forgotten when care starts.
+- **Private calls:** "Call" in both apps connects the patient and the caregiver through one company number (Exotel), so neither sees the other's phone number. Allowed only from acceptance until care is finished, at most 10 calls per visit, each logged. Until Exotel is set up, the button says private calls are coming soon.
+- **Server:** `supabase/007_maps_calls.sql` and the `call` Edge Function. Admin Settings → Maps and calls lists the setup steps.
+- Maps use Leaflet with OpenStreetMap (no key); a tile provider can be set with `NEXT_PUBLIC_MAP_TILES`.
+- New Telugu and Kannada text (`lib/i18n/strings-16.ts`). The demo works as before.
+
+---
+
+## 1.6.0 (7 Nov 2026)
+
+**Backend, phase 8: notifications on the phone, and SMS codes for real numbers**
+- **The phone rings even when the app is closed:** every notification the apps already show (a new request, accepted, on the way, arrived, the visit record, cancelled, payout sent, verification decisions, team messages) is also sent to the person's phone with standard Web Push. A new request for a caregiver keeps ringing until it is looked at.
+- **In their own language:** the notification is shown in Telugu, Kannada or English, whichever the person chose in the app (`/push-strings.json` is built with the site from the database's message keys).
+- **Switching it on:** Profile → Notifications in both apps. The caregiver app also offers it on the Jobs screen while online, the patient app while finding a nurse. Blocked notifications and iPhones not yet added to the Home Screen get clear steps. Log out removes the phone, so the next person does not get someone else's notifications.
+- **Server:** `supabase/006_notifications.sql` (push addresses, each person sees only their own; each notification sent once) and the `push` Edge Function (encrypts each message for the phone and signs it; phones that unsubscribed are removed).
+- **Admin panel:** Settings → Notifications and SMS: make the push keys (the private key is shown once, for Supabase's secrets) and the setup steps.
+- **SMS codes for real numbers:** steps for DLT and either a built-in provider or MSG91 through the `send-sms` Edge Function (Supabase's Send SMS hook, signature checked).
+- New Telugu and Kannada text (`lib/i18n/strings-15.ts`). The demo works as before.
+
+---
+
+## 1.5.0 (7 Nov 2026)
+
+**Backend, phase 7: online payment, refunds and payouts**
+- **Pay online when booking (signed in):** UPI, cards and net banking through Razorpay's own payment window. The request goes to caregivers once the payment has gone through. If the window is closed or the payment fails, the visit screen shows "Finish paying to send your request" with Pay now, "Pay after the visit instead", or cancel. Online payment stays off until the owner switches it on (admin Settings → Payments).
+- **Refunds go back by themselves:** when a paid booking is cancelled, a visit is missed or stopped, or the team cancels, what the rules say is owed is sent back through Razorpay to the same UPI or card, and the patient is told. The team can also give a refund beyond the rules (for example the patient was hospitalised) from the booking.
+- **The secret key stays on the server:** a small server program (`supabase/functions/payments`, a Supabase Edge Function) creates Razorpay orders, checks Razorpay's signature on every payment, sends refunds, and listens to Razorpay's webhook so a payment counts even if the phone closes.
+- **Admin panel (signed in):** Refunds page (still to send, and sent, with the Razorpay reference); Payouts page (each caregiver's visits, earnings, cash collected and what to transfer for a week, a bank file, and recording the transfer with its bank reference — the caregiver is told); bookings show "Waiting for payment" and what was paid and refunded.
+- `supabase/005_payments.sql`, and setup steps for Razorpay and the Edge Function in `supabase/README.md`.
+- New Telugu and Kannada text (`lib/i18n/strings-14.ts`). The demo works as before (pay after the visit).
+
+---
+
+## 1.4.0 (7 Nov 2026)
+
+**Backend, phase 6: settings from the server**
+- **Admin panel (signed in, owner):** the Settings page reads from and saves to the database: services (prices, on or off, who can do them, prescription, new services), vitals-check prices, the home visit and urgent charges, the cancellation rule numbers, the pay split, payout day, time limits, and cities with their areas. Each save is written to the audit log.
+- **Every phone follows:** the signed-in patient and caregiver apps read the settings when they open and every 5 minutes, and keep the last ones for offline use. Prices, the services list, the cancellation rule shown before payment and in the cancel screen, the caregiver's earnings, the time to answer a request and the renewal reminder all use them. The help answers ("free within 5 minutes", "80% of the service price", "wait 10 minutes") now show the numbers from the settings, in all three languages.
+- **New bookings use the new numbers at once**, because the database already charges and pays from the same settings (no new SQL file this time).
+- The demo keeps its built-in numbers (and the same-browser link with the admin demo).
+
+---
+
+## 1.3.0 (7 Nov 2026)
+
+**Backend, phase 5: real bookings**
+- **Patient app (signed in):** a booking is saved to the database and sent to every verified caregiver who fits (city, nurse-only services, woman caregiver or language if asked, their days, hours and services). The first to accept gets the visit. "Finding a nurse for you" shows while it waits; if nobody accepts in time, the patient can look again, choose another time, or cancel for free.
+- **Follow the visit for real:** accepted, on the way, running late, at the door, care in progress, completed. The arrival code is a real 4-digit code for each booking, which the caregiver checks with the server. The page updates every few seconds, and the server sends the notifications.
+- **Visit record and rating:** the caregiver's record (note, details, readings, warnings, wound photo) reaches the patient straight away and is kept in Records on every phone. The rating goes to the caregiver and updates their average.
+- **Cancel and move:** the same rule as before, now worked out by the server (free before anyone accepts, in the first 5 minutes, more than 2 hours before, or when the caregiver is 30+ minutes late; otherwise the ₹49 charge is kept and paid to the caregiver). A charge on a cash booking is collected at the next visit.
+- **Prescriptions** are uploaded to private storage. Only the caregiver who takes the visit (and support) can open them, and the caregiver sees the real photo at the safety check.
+- **Caregiver app (signed in):** going online and the work settings are saved to the account. Real requests arrive with a countdown; accept (the server checks nobody else took it first) or decline. Each step of the visit, the code check, "nobody answered" (after the waiting time), "stop the visit", "I cannot do this visit" and the record go to the server. Earnings, payouts and ratings come from the server; the earnings are worked out by the server from the pay split.
+- **Admin panel (signed in):** the Bookings page shows real bookings (refreshes every 15 seconds), who they were offered to, and lets support give a visit to a caregiver by hand or cancel it (the patient pays nothing). Finance can look but not change. Each change is in the audit log.
+- **Online payment** (UPI, card) shows "coming soon" in the signed-in apps: patients pay the caregiver after the visit until the payment gateway (phase 7).
+- `supabase/004_bookings.sql`: the new database functions, to run once after 001 and 003.
+- New text in Telugu and Kannada (`lib/i18n/strings-12.ts`). The demo works as before.
+
+---
+
 ## 1.2.0 (27 Oct 2026)
 
 **Backend, phases 3 and 4: caregiver documents and real verification**

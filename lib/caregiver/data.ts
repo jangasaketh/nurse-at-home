@@ -7,10 +7,11 @@ import { CITIES, SERVICE_CATALOG, SERVICES, SLOTS, URGENT_FEE, URGENT_SLOT, VISI
 
 /* ---------- Pay (PLACEHOLDERS: the owner must set these) ---------- */
 // What the caregiver earns from each visit. Everything else the patient pays stays with the platform.
-export const CAREGIVER_SHARE = 0.8; // of the service price
-export const VISIT_FEE_SHARE = 1; // of the Rs 49 home visit charge (also what is paid for a missed visit or late cancellation)
-export const URGENT_SHARE = 0.5; // of the Rs 100 urgent charge
-export const PAYOUT_DAY = 1; // weekly payout on Monday (0 = Sunday)
+// From 1.4.0 signed-in apps take these from the admin panel's Settings (server), through setPaySettings below.
+export let CAREGIVER_SHARE = 0.8; // of the service price
+export let VISIT_FEE_SHARE = 1; // of the Rs 49 home visit charge (also what is paid for a missed visit or late cancellation)
+export let URGENT_SHARE = 0.5; // of the Rs 100 urgent charge
+export let PAYOUT_DAY = 1; // weekly payout on Monday (0 = Sunday)
 
 /* ---------- Who can do what ---------- */
 export type Role = "nurse" | "compounder";
@@ -64,6 +65,7 @@ export type Job = {
   area: string;
   address: string; // full address, shown only after the request is accepted
   landmark: string;
+  pin?: { lat: number; lng: number } | null; // the patient's pin on the map (own visits only, 1.7.0)
   cityId: string;
   distanceKm: number;
   dateOffset: number; // days from today
@@ -78,6 +80,22 @@ export type Job = {
   pay: "online" | "cash";
   note: string; // from the patient
   receivedAt: number;
+  // Live mode only: what the server says about this request or visit.
+  live?: boolean;
+  code?: string; // booking number, e.g. NH-10023
+  status?: string; // requested, accepted, en_route, arrived, in_progress
+  expiresAt?: number; // the offer runs out at this time (ms)
+  unitPrice?: number;
+  visitFee?: number;
+  urgentFee?: number;
+  carried?: number; // unpaid charge from the patient's earlier booking, collected with this one (cash)
+  collect?: number; // cash or UPI to collect at this visit
+  earning?: number; // what the caregiver earns for this visit
+  feeEarning?: number; // what the caregiver earns if the visit is missed or stopped
+  prescriptionPath?: string | null;
+  codeOk?: boolean;
+  arrivedAt?: number | null;
+  lateMinutes?: number;
 };
 
 type Template = Omit<Job, "id" | "area" | "address" | "landmark" | "cityId" | "language" | "receivedAt"> & { areaIdx: number };
@@ -116,6 +134,11 @@ export const isUrgent = (job: Job) => job.slot === URGENT_SLOT;
 
 /** What the patient pays for one visit. */
 export function visitPrice(job: Job) {
+  if (job.unitPrice !== undefined) {
+    const urgent = job.visits === 1 ? job.urgentFee ?? 0 : 0;
+    const total = job.unitPrice + (job.visitFee ?? VISIT_FEE) + urgent;
+    return { servicePrice: job.unitPrice, visitFee: job.visitFee ?? VISIT_FEE, urgent, total: job.collect ? Math.max(job.collect, total) : total };
+  }
   const service = serviceOf(job);
   const servicePrice = job.serviceId === "vitals" ? checksOf(job).reduce((sum, c) => sum + c.price, 0) : service.price;
   const urgent = isUrgent(job) ? URGENT_FEE : 0;
@@ -128,10 +151,12 @@ export function earningFor(job: Job) {
   const service = Math.round(p.servicePrice * CAREGIVER_SHARE);
   const visitFee = Math.round(p.visitFee * VISIT_FEE_SHARE);
   const urgent = Math.round(p.urgent * URGENT_SHARE);
+  // Live mode: the server's figure is the one paid; the lines are shown so they add up to it.
+  if (job.earning !== undefined) return { service: job.earning - visitFee - urgent, visitFee, urgent, total: job.earning, patientPays: p.total };
   return { service, visitFee, urgent, total: service + visitFee + urgent, patientPays: p.total };
 }
 
-export const NO_SHOW_PAY = Math.round(VISIT_FEE * VISIT_FEE_SHARE); // paid when nobody answers the door
+export let NO_SHOW_PAY = Math.round(VISIT_FEE * VISIT_FEE_SHARE); // paid when nobody answers the door
 
 /* ---------- Visit record: reading checks ---------- */
 // Plain-language flags only. The caregiver tells the family to share the reading with their doctor.
@@ -202,11 +227,24 @@ export const SAMPLE_RX: Record<string, { lines: string[]; doctor: string }> = {
 };
 
 /* ---------- Answering requests (PLACEHOLDERS) ---------- */
-export const OFFER_MINUTES = 15; // time to answer a scheduled request
-export const OFFER_MINUTES_URGENT = 3; // time to answer an urgent ("within 60 minutes") request
+export let OFFER_MINUTES = 15; // time to answer a scheduled request
+export let OFFER_MINUTES_URGENT = 3; // time to answer an urgent ("within 60 minutes") request
 
 /* ---------- Registration renewal (PLACEHOLDER) ---------- */
-export const RENEWAL_WARN_DAYS = 60; // start reminding this many days before a nurse's registration expires
+export let RENEWAL_WARN_DAYS = 60; // start reminding this many days before a nurse's registration expires
+
+/** Pay split and time limits from the server's settings (live mode). Percentages as set in the admin panel. */
+export function setPaySettings(p: Partial<{ caregiverShare: number; visitFeeShare: number; urgentShare: number; payoutDay: number; offerMinutes: number; offerMinutesUrgent: number; renewalWarnDays: number }>) {
+  const n = (v: unknown, keep: number, max = Infinity) => (typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= max ? v : keep);
+  CAREGIVER_SHARE = n(p.caregiverShare, CAREGIVER_SHARE * 100, 100) / 100;
+  VISIT_FEE_SHARE = n(p.visitFeeShare, VISIT_FEE_SHARE * 100, 100) / 100;
+  URGENT_SHARE = n(p.urgentShare, URGENT_SHARE * 100, 100) / 100;
+  PAYOUT_DAY = n(p.payoutDay, PAYOUT_DAY, 6);
+  OFFER_MINUTES = n(p.offerMinutes, OFFER_MINUTES);
+  OFFER_MINUTES_URGENT = n(p.offerMinutesUrgent, OFFER_MINUTES_URGENT);
+  RENEWAL_WARN_DAYS = n(p.renewalWarnDays, RENEWAL_WARN_DAYS);
+  NO_SHOW_PAY = Math.round(VISIT_FEE * VISIT_FEE_SHARE);
+}
 
 /* ---------- Report a problem ---------- */
 export const REPORT_TOPICS = ["Problem at a visit", "Payment or payout", "A patient behaved badly", "Safety concern", "The app is not working", "Something else"];
