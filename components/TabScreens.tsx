@@ -4,9 +4,11 @@ import { useState } from "react";
 import { useApp, type Screen } from "@/lib/store";
 import { SELF, canReschedule, describeBooking, formatAddress, patientMeta, tx } from "@/lib/booking";
 import { useLoad } from "@/lib/fake-api";
+import { setSameCaregiver } from "@/lib/patient-bookings";
 import { t } from "@/lib/i18n";
 import { LanguagePicker } from "./AuthScreens";
 import { InstallCard } from "./InstallCard";
+import { PushCard } from "./PushCard";
 import { Icon, type IconName } from "./Icon";
 import { CheckRow, EmptyState, ErrorState, Skeleton } from "./ui";
 
@@ -32,7 +34,7 @@ export function TabBar() {
 }
 
 export function BookingsScreen() {
-  const { state, set, go, open } = useApp();
+  const { state, set, go, open, refresh } = useApp();
   const load = useLoad(state.simulateFailure);
   const booking = state.booking;
   const b = booking ? describeBooking(booking) : null;
@@ -40,8 +42,15 @@ export function BookingsScreen() {
   // Switch between "same person every visit" and "any available" for the rest of a course.
   const switchNurse = () => {
     if (!booking || !b) return;
+    if (booking.live) {
+      const same = !booking.sameCaregiver;
+      set({ booking: { ...booking, sameCaregiver: same } });
+      void setSameCaregiver(booking.live.id, same).then(() => refresh()).catch(() => set({ booking: { ...booking } }));
+      return;
+    }
     set({ booking: { ...booking, sameCaregiver: !booking.sameCaregiver, caregiverId: b.caregiver.id, rotateFrom: booking.visitNo } });
   };
+  const waiting = booking?.live?.status === "requested";
 
   const statusPill = (status: string) =>
     status === "completed"
@@ -65,9 +74,9 @@ export function BookingsScreen() {
                   <button type="button" className="card card-btn card-active" onClick={() => go("tracking")}>
                     <span className="strong" style={{ fontSize: 17 }}>{t(b.service.name)}</span>
                     <span className="small muted">{b.when} · {b.patient.chip}</span>
-                    <span className="small muted">{t("With {name}", { name: b.caregiver.name })}</span>
+                    <span className="small muted">{waiting ? t("Finding a {who} for you", { who: b.who }) : t("With {name}", { name: b.caregiver.name })}</span>
                     <span className="small muted">{tx(booking.addressText)}</span>
-                    <span className="small strong primary-text">{t("Track visit")}</span>
+                    <span className="small strong primary-text">{waiting ? t("See your request") : t("Track visit")}</span>
                   </button>
                   {state.step < 3 && (
                     <div className="actions">
@@ -77,13 +86,15 @@ export function BookingsScreen() {
                       <button type="button" className="btn btn-danger" style={{ minHeight: 48 }} onClick={() => open("cancel")}>{t("Cancel visit")}</button>
                     </div>
                   )}
-                  {b.isCourse && (
+                  {b.isCourse && !waiting && (
                     <div className="tint-box stack" style={{ gap: 6 }}>
                       <div className="strong">{b.visitLabel}, {b.planText}</div>
                       <div className="small" style={{ color: "var(--ink-soft)" }}>
                         {booking.sameCaregiver
                           ? t("{name} comes for every visit.", { name: b.caregiver.name })
-                          : t("A different {who} may come each time. You see who is coming the evening before.", { who: b.who })}
+                          : booking.live
+                            ? t("A different {who} may come each time. We tell you who is coming when they accept.", { who: b.who })
+                            : t("A different {who} may come each time. You see who is coming the evening before.", { who: b.who })}
                       </div>
                       <button type="button" className="link-btn" onClick={switchNurse}>
                         {booking.sameCaregiver
@@ -206,6 +217,13 @@ export function ProfileScreen() {
           <InstallCard />
         </div>
 
+        {live && (
+          <div className="stack">
+            <h2>{t("Notifications")}</h2>
+            <PushCard app="patient" userId={state.userId} lang={state.lang} live />
+          </div>
+        )}
+
         <div className="stack">
           <h2>{t("Family members")}</h2>
           <div className="list">
@@ -288,7 +306,8 @@ export function ProfileScreen() {
           </button>
         </div>
 
-        {/* Remove this whole block before launch. */}
+        {/* Demo only (hidden when signed in). */}
+        {!live && (
         <div className="dashed-box stack">
           <h2>{t("Prototype tools")}</h2>
           <CheckRow id="simulate-failure" checked={state.simulateFailure} onChange={(v) => set({ simulateFailure: v })}>
@@ -309,6 +328,7 @@ export function ProfileScreen() {
             <button type="button" className="link-btn" onClick={() => setAskReset(true)}>{t("Erase all data and start again")}</button>
           )}
         </div>
+        )}
 
         {/* Live: sign out of the account and clear this phone. Demo: back to the login screen, keeping the demo data. */}
         <button type="button" className="btn btn-danger" onClick={() => (live ? void signOut() : go("login"))}>{t("Log out")}</button>

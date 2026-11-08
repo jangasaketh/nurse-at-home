@@ -41,7 +41,7 @@ export class FileGone extends Error {
  * Upload into the person's own folder in a private bucket: "<user id>/<kind>-<time>.<ext>".
  * Returns the storage path. Already uploaded files are not uploaded again.
  */
-export async function uploadFile(app: AppName, bucket: "kyc" | "prescriptions" | "tickets", userId: string, kind: string, p: PhotoFile): Promise<string> {
+export async function uploadFile(app: AppName, bucket: "kyc" | "prescriptions" | "tickets" | "visits", userId: string, kind: string, p: PhotoFile): Promise<string> {
   if (p.path) return p.path;
   const blob = blobFor(p);
   if (!blob) throw new FileGone(kind);
@@ -55,7 +55,7 @@ export async function uploadFile(app: AppName, bucket: "kyc" | "prescriptions" |
 }
 
 /** Short-lived links (10 minutes) to look at stored files. Missing ones are left out. */
-export async function viewLinks(app: AppName, bucket: "kyc" | "prescriptions" | "tickets", paths: string[]): Promise<Record<string, string>> {
+export async function viewLinks(app: AppName, bucket: "kyc" | "prescriptions" | "tickets" | "visits", paths: string[]): Promise<Record<string, string>> {
   const list = [...new Set(paths.filter(Boolean))];
   if (!list.length) return {};
   const { data, error } = await db(app).storage.from(bucket).createSignedUrls(list, 600);

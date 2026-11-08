@@ -27,12 +27,16 @@ const LANGS: Lang[] = ["en", "te", "kn"];
 /** Read the account from the database after sign-in. */
 export async function pullAccount(userId: string): Promise<PulledAccount> {
   const client = db("patient");
-  const [profile, people, places, contact] = await Promise.all([
+  const [profile, people, placesWithPins, contact] = await Promise.all([
     client.from("profiles").select("full_name, lang, consent_at").eq("id", userId).maybeSingle(),
     client.from("patient_people").select("id, name, relation, age, gender, created_at").eq("account_id", userId).order("created_at"),
-    client.from("addresses").select("id, label, line, area, city_id, pincode, landmark, created_at").eq("account_id", userId).order("created_at"),
+    client.from("addresses").select("id, label, line, area, city_id, pincode, landmark, lat, lng, created_at").eq("account_id", userId).order("created_at"),
     client.from("emergency_contacts").select("name, relation, phone").eq("account_id", userId).maybeSingle(),
   ]);
+  // Before supabase/007_maps_calls.sql is run there are no pins: read the addresses without them.
+  const places = placesWithPins.error?.code === "42703"
+    ? await client.from("addresses").select("id, label, line, area, city_id, pincode, landmark, created_at").eq("account_id", userId).order("created_at")
+    : placesWithPins;
   for (const r of [profile, people, places, contact]) if (r.error) throw r.error;
 
   const remoteIds: Record<string, string> = {};
@@ -46,7 +50,7 @@ export async function pullAccount(userId: string): Promise<PulledAccount> {
   patients.sort((a, b) => Number(b.relation === SELF) - Number(a.relation === SELF));
   const addresses: Address[] = (places.data ?? []).map((a) => {
     remoteIds[a.id] = a.id;
-    return { id: a.id, label: a.label, line: a.line, area: a.area, cityId: a.city_id, pincode: a.pincode, landmark: a.landmark ?? "" };
+    return { id: a.id, label: a.label, line: a.line, area: a.area, cityId: a.city_id, pincode: a.pincode, landmark: a.landmark ?? "", lat: (a as { lat?: number | null }).lat ?? null, lng: (a as { lng?: number | null }).lng ?? null };
   });
   const lang = LANGS.includes(profile.data?.lang as Lang) ? (profile.data?.lang as Lang) : "en";
   return {
@@ -96,7 +100,7 @@ export async function pushAccount(userId: string, prev: AccountSnapshot | null, 
   // Addresses
   const changedPlaces = next.addresses.filter((a) => !same(a, prev?.addresses.find((b) => b.id === a.id)));
   if (changedPlaces.length) {
-    const rows = changedPlaces.map((a) => ({ id: idFor(a.id), account_id: userId, label: a.label, line: a.line, area: a.area, city_id: a.cityId, pincode: a.pincode, landmark: a.landmark }));
+    const rows = changedPlaces.map((a) => ({ id: idFor(a.id), account_id: userId, label: a.label, line: a.line, area: a.area, city_id: a.cityId, pincode: a.pincode, landmark: a.landmark, ...(a.lat != null && a.lng != null ? { lat: a.lat, lng: a.lng } : {}) }));
     const { error } = await client.from("addresses").upsert(rows);
     if (error) throw error;
   }

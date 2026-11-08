@@ -30,9 +30,9 @@ export function Chip({ selected, onClick, className = "", children }: { selected
   );
 }
 
-export function RadioCard({ selected, onClick, label, sub }: { selected: boolean; onClick: () => void; label: string; sub?: string }) {
+export function RadioCard({ selected, onClick, label, sub, disabled }: { selected: boolean; onClick: () => void; label: string; sub?: string; disabled?: boolean }) {
   return (
-    <button type="button" className="radio-card" aria-pressed={selected} onClick={onClick}>
+    <button type="button" className="radio-card" aria-pressed={selected} aria-disabled={disabled || undefined} style={disabled ? { opacity: 0.6 } : undefined} onClick={onClick}>
       <span className="radio-dot" />
       <span className="stack-xs">
         <span className="strong">{label}</span>

@@ -54,3 +54,24 @@ export function useAction(simulateFailure: boolean) {
 
   return { busy, failed, run };
 }
+
+/** For a button that calls the server (live mode): "busy" while it runs, "failed" with the error if it did not go through. */
+export function useServerAction() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const alive = useRef(true);
+  useEffect(() => () => { alive.current = false; }, []);
+  const run = async <T,>(work: () => Promise<T>, onSuccess?: (result: T) => void) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await work();
+      if (alive.current) setBusy(false);
+      onSuccess?.(result);
+    } catch (e) {
+      if (alive.current) { setBusy(false); setError(e ?? new Error("failed")); }
+    }
+  };
+  return { busy, failed: error !== null, error, run, clear: () => setError(null) };
+}

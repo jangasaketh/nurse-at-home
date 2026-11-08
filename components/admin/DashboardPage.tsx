@@ -2,6 +2,7 @@
 
 // ADMIN: daily overview and the list of things waiting for the team.
 
+import { LiveDashboardPage } from "./LivePages";
 import { useAdmin } from "@/lib/admin/store";
 import { SERVICES } from "@/lib/data";
 import { canOpen, DAY, ago, daysUntilMonthEnd, isPaidOut, money, moneyFor, mondayOf, startOfToday, type AdminPage } from "@/lib/admin/data";
@@ -10,7 +11,7 @@ import { Badge, Meter, PageHead, Stat } from "./ui";
 
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-export function DashboardPage() {
+function SampleDashboardPage() {
   const ctx = useAdmin();
   const { view, state, nowMs, go } = ctx;
   const s = state.settings;
@@ -142,4 +143,10 @@ export function DashboardPage() {
       </div>
     </>
   );
+}
+
+/** Signed in: from the database (1.8.0). Demo: the sample page. */
+export function DashboardPage() {
+  const { state } = useAdmin();
+  return state.mode === "live" ? <LiveDashboardPage /> : <SampleDashboardPage />;
 }

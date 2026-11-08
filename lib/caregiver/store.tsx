@@ -5,11 +5,14 @@
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { db } from "@/lib/supabase";
+import { forgetPushOnSignOut } from "@/lib/push";
+import { useServerSettings } from "@/lib/settings-sync";
 import { pullCaregiver, pullDocs, pullNotices, pullStatus, pushCaregiver, type CgSnapshot, type PulledCaregiver, type PulledDocs } from "./sync";
 import { setLang, type Lang } from "@/lib/i18n";
 import type { Msg } from "@/lib/booking";
 import type { PhotoFile } from "@/lib/prescription";
-import { sampleJobs, type IdType, type Job, type Role } from "./data";
+import { isUrgent, sampleJobs, slotHour, type IdType, type Job, type Role } from "./data";
+import { pullWork, pushWorkSettings, stepForStatus, type Work } from "./work";
 
 export type CgScreen =
   | "login" | "otp" | "role"
@@ -138,6 +141,7 @@ export type CgState = {
   userId: string | null;
   cgExists: boolean; // the caregiver row is already in the database
   syncError: boolean;
+  liveOffers: Job[]; // live mode: requests the server offered to this caregiver
 };
 
 const now = () => Date.now();
@@ -199,6 +203,7 @@ const initialState: CgState = {
   userId: null,
   cgExists: false,
   syncError: false,
+  liveOffers: [],
 };
 
 export const CG_STORAGE_KEY = "nurse-at-home-caregiver:v1";
@@ -216,9 +221,13 @@ type Ctx = {
   /** After a real sign-in: load the caregiver's account and continue to the right screen. */
   signedIn: (userId: string) => Promise<void>;
   signOut: () => Promise<void>;
-  /** All sample jobs for the caregiver's city (requests and accepted visits are looked up here). */
+  /** All sample jobs for the caregiver's city (requests and accepted visits are looked up here). Live: the offers. */
   jobs: Job[];
   jobById: (id: string | null) => Job | null;
+  /** Live mode: read requests, visits, earnings and ratings from the server now. */
+  refreshWork: () => Promise<void>;
+  /** Live mode: set while the phone is in the middle of a server call about a visit (polling then waits). */
+  holdWork: (on: boolean) => void;
 };
 
 const CgContext = createContext<Ctx | null>(null);
@@ -229,6 +238,8 @@ export function CaregiverProvider({ children }: { children: ReactNode }) {
 
   setLang(state.lang);
   useEffect(() => { document.documentElement.lang = state.lang; }, [state.lang]);
+  // Live mode: services, prices, pay split and time limits set in the admin panel (read from the server).
+  useServerSettings(() => db("caregiver"), ready && state.mode === "live");
 
   useEffect(() => {
     try {
@@ -338,6 +349,48 @@ export function CaregiverProvider({ children }: { children: ReactNode }) {
     return () => { clearInterval(id); window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onFocus); };
   }, [ready, state.mode, state.userId, synced]);
 
+  // Live mode: requests, visits, earnings, payouts and ratings come from the server. Checked every 8 seconds
+  // once verified (and when the app comes back to the front).
+  const holding = useRef(false);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const refreshWork = async () => {
+    const s = stateRef.current;
+    if (s.mode !== "live" || !s.userId || s.kycStatus !== "approved" || holding.current) return;
+    const work = await pullWork().catch(() => null);
+    if (work && !holding.current) setState((prev) => mergeWork(prev, work));
+  };
+  useEffect(() => {
+    if (!ready || state.mode !== "live" || !state.userId || !synced || state.kycStatus !== "approved") return;
+    let busy = false;
+    const tick = async () => {
+      if (busy || document.visibilityState === "hidden") return;
+      busy = true;
+      try { await refreshWork(); } finally { busy = false; }
+    };
+    void tick();
+    const id = setInterval(tick, 8000);
+    const onFocus = () => void tick();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => { clearInterval(id); window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onFocus); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, state.mode, state.userId, synced, state.kycStatus]);
+
+  // Live mode: "online" and the work settings are saved to the account, because the server matches requests.
+  const workKey = JSON.stringify({ online: state.online, a: state.availability });
+  const lastWork = useRef<string | null>(null);
+  useEffect(() => {
+    if (!ready || state.mode !== "live" || !state.userId || !synced || !state.cgExists || state.kycStatus !== "approved" || state.suspended) return;
+    if (lastWork.current === workKey) return;
+    const prevKey = lastWork.current;
+    lastWork.current = workKey;
+    pushWorkSettings(state.userId, state.online, state.availability)
+      .then(() => { setState((prev) => (prev.syncError ? { ...prev, syncError: false } : prev)); void refreshWork(); })
+      .catch(() => { lastWork.current = prevKey; setState((prev) => ({ ...prev, syncError: true })); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workKey, ready, state.mode, state.userId, synced, state.cgExists, state.kycStatus, state.suspended]);
+
   const signedIn = async (userId: string) => {
     const acc = await pullCaregiver(userId);
     const docs = acc.exists ? await pullDocs(userId).catch(() => null) : null;
@@ -350,6 +403,7 @@ export function CaregiverProvider({ children }: { children: ReactNode }) {
     });
   };
   const signOut = async () => {
+    if (state.mode === "live") await forgetPushOnSignOut("caregiver", state.userId);
     if (state.mode === "live") await db("caregiver").auth.signOut().catch(() => {});
     lastPushed.current = null;
     setSynced(false);
@@ -372,11 +426,12 @@ export function CaregiverProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...initialState, lang: prev.lang }));
   };
 
-  const jobs = sampleJobs(state.personal?.cityId ?? "hyd");
+  const jobs = state.mode === "live" ? state.liveOffers : sampleJobs(state.personal?.cityId ?? "hyd");
   const jobById = (id: string | null) => (id ? state.upcoming.find((j) => j.id === id) ?? jobs.find((j) => j.id === id) ?? null : null);
+  const holdWork = (on: boolean) => { holding.current = on; };
 
   return (
-    <CgContext.Provider value={{ state, ready, set, update, go, open, back, reset, signedIn, signOut, jobs, jobById }}>
+    <CgContext.Provider value={{ state, ready, set, update, go, open, back, reset, signedIn, signOut, jobs, jobById, refreshWork, holdWork }}>
       {children}
     </CgContext.Provider>
   );
@@ -493,4 +548,32 @@ function mergeDocs(prev: CgState, docs: PulledDocs | null): CgState {
     renewal: docs.renewal,
     notices: mergeNotices(prev.notices, docs.notices),
   };
+}
+
+const sortVisits = (jobs: Job[]) =>
+  [...jobs].sort((a, b) => a.dateOffset - b.dateOffset || (isUrgent(b) ? 1 : 0) - (isUrgent(a) ? 1 : 0) || slotHour(a.slot) - slotHour(b.slot));
+
+/** The server's requests and visits laid over the phone. The visit in progress keeps its step on the phone,
+ *  moved forward if the server is further on. A visit that disappeared (cancelled by the patient or the team)
+ *  is closed here; its notification explains why. */
+function mergeWork(prev: CgState, w: Work): CgState {
+  const next: CgState = {
+    ...prev,
+    liveOffers: w.offers,
+    upcoming: sortVisits(w.jobs),
+    earnings: w.earnings,
+    payouts: w.payouts,
+    reviews: w.reviews,
+  };
+  if (prev.active) {
+    const job = w.jobs.find((j) => j.id === prev.active!.jobId);
+    if (!job) {
+      next.active = null;
+      if (["visit", "record", "job", "cancel-visit"].includes(prev.screen)) { next.screen = "jobs"; next.trail = []; }
+    } else {
+      const serverStep = stepForStatus(job.status, job.codeOk);
+      if (serverStep > prev.active.step) next.active = { ...prev.active, step: serverStep };
+    }
+  }
+  return JSON.stringify(next) === JSON.stringify(prev) ? prev : next;
 }

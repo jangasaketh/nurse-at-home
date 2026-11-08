@@ -1,12 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useApp } from "@/lib/store";
-import { SAMPLE_REVIEWS, SLOTS, URGENT_FEE, URGENT_SLOT, VISIT_COUNTS, VITAL_CHECKS } from "@/lib/data";
+import { PAYMENTS_ON, SAMPLE_REVIEWS, SLOTS, URGENT_FEE, URGENT_SLOT, VISIT_COUNTS, VITAL_CHECKS } from "@/lib/data";
 import {
-  allowedText, dayAt, describeDraft, isVitals, money, msg, addressMsg, policyLine, prescriptionMissing, proofText, relationWord, slotText, whenMsg, yearsText,
+  allowedText, dayAt, describeDraft, slotPassed, isVitals, money, msg, addressMsg, policyLine, prescriptionMissing, proofText, relationWord, slotText, whenMsg, yearsText,
 } from "@/lib/booking";
-import { useAction, useLoad } from "@/lib/fake-api";
+import { useAction, useLoad, useServerAction } from "@/lib/fake-api";
+import { FileGone } from "@/lib/files";
+import { bookVisit, bookingFromServer, bookingProblem, pullBooking, savePrescription } from "@/lib/patient-bookings";
+import { payBooking } from "@/lib/payments";
 import { t } from "@/lib/i18n";
 import { Icon, Star } from "./Icon";
 import { PrescriptionCard, PrescriptionPicker } from "./PrescriptionPicker";
@@ -145,9 +148,12 @@ export function ScheduleScreen() {
   const d = describeDraft(state);
   const [error, setError] = useState(false);
 
+  // Live mode: the request goes to every verified caregiver who fits, so there is no list to choose from.
+  const live = state.mode === "live";
   const next = () => {
-    if (state.slot) go("caregivers");
-    else setError(true);
+    const gone = live && !!state.slot && state.slot !== URGENT_SLOT && slotPassed(state.dateIdx, state.slot);
+    if (state.slot && !gone) go(live ? "review" : "caregivers");
+    else { if (gone) set({ slot: null }); setError(true); }
   };
 
   // "Within 60 minutes" only makes sense for a single visit today.
@@ -191,11 +197,16 @@ export function ScheduleScreen() {
             />
           )}
           <div className="grid grid-3">
-            {SLOTS.map((slot) => (
-              <Chip key={slot} selected={slot === state.slot} onClick={() => { set({ slot }); setError(false); }}>
-                {slot}
-              </Chip>
-            ))}
+            {SLOTS.map((slot) => {
+              const gone = live && slotPassed(state.dateIdx, slot);
+              return (
+                <button type="button" key={slot} className="chip" aria-pressed={slot === state.slot} aria-disabled={gone || undefined}
+                  onClick={() => { if (!gone) { set({ slot }); setError(false); } }}>
+                  {slot}
+                  {gone && <span className="sub">{t("Passed")}</span>}
+                </button>
+              );
+            })}
           </div>
           {error && <div role="alert" className="error">{t("Pick an arrival time to continue.")}</div>}
           <p className="small muted">{t("The {who} arrives within 30 minutes of the time you pick.", { who: d.who })}</p>
@@ -250,7 +261,7 @@ export function ScheduleScreen() {
         )}
       </div>
       <BottomBar>
-        <button type="button" className="btn btn-primary" onClick={next}>{t("See who is available")}</button>
+        <button type="button" className="btn btn-primary" onClick={next}>{live ? t("Continue") : t("See who is available")}</button>
       </BottomBar>
     </div>
   );
@@ -438,12 +449,23 @@ export function ReviewScreen() {
   const { state, set, go, open, notify } = useApp();
   const d = describeDraft(state);
   const action = useAction(state.simulateFailure);
+  const server = useServerAction();
+  const live = state.mode === "live" && !!state.userId;
+  const [note, setNote] = useState("");
+  // Live mode: online payment only when the owner has switched it on (Settings → Payments).
+  const onlineOk = !live || PAYMENTS_ON;
+  useEffect(() => { if (!onlineOk && state.pay !== "cash") set({ pay: "cash" }); }, [onlineOk, state.pay]); // eslint-disable-line react-hooks/exhaustive-deps
   const contact = state.contact;
-  const payNow = d.total + state.arrears; // includes any unpaid charge from an earlier cash booking
+  // Includes any unpaid charge from an earlier cash booking (collected in cash, so not when paying online).
+  const payNow = d.total + (live && state.pay !== "cash" ? 0 : state.arrears);
   const times = d.isCourse ? ` × ${d.visits}` : "";
   const serviceName = t(d.service.name);
 
-  const caregiverLine = d.isCourse
+  const caregiverLine = live
+    ? d.isCourse && !state.sameNurse
+      ? t("Any verified {who} who is free, for each visit", { who: d.who })
+      : t("The first verified {who} near you to accept", { who: d.who })
+    : d.isCourse
     ? state.sameNurse
       ? t("{name}, every visit", { name: d.caregiver.name })
       : t("{name} first, then any available {who}", { name: d.caregiver.name, who: d.who })
@@ -498,9 +520,53 @@ export function ReviewScreen() {
       notify(msg("Booking confirmed"), msg("{service} for {patient}, {when}, with {caregiver}.", { service: msg(d.service.name), patient: d.patient.name, when: whenMsg(d.startDate, d.slot), caregiver: d.caregiver.name }));
     });
 
+  const confirmLive = () =>
+    server.run(async () => {
+      const userId = state.userId!;
+      const personId = state.remoteIds[d.patient.id];
+      const addressId = d.address ? state.remoteIds[d.address.id] : undefined;
+      if (!personId || !addressId) throw new Error("not-synced");
+      let prescriptionId: string | null = null;
+      let prescription = d.service.needsPrescription ? state.prescription : null;
+      if (prescription) {
+        const saved = await savePrescription(userId, prescription);
+        prescriptionId = saved.id;
+        prescription = { ...prescription, path: saved.path };
+      }
+      const res = await bookVisit({
+        person_id: personId, address_id: addressId, service_id: d.service.id, vital_ids: d.checks.map((c) => c.id), date: d.startDate,
+        slot: d.slot, visits: d.visits, every_days: state.every, same_caregiver: state.sameNurse, women_only: state.womenOnly,
+        language: state.language, pay: onlineOk ? state.pay : "cash", notify_contact: state.notifyFamily && contact !== null, prescription_id: prescriptionId, note: note.trim(),
+      });
+      // Paid online: open Razorpay now. If the window is closed, the booking waits on the visit screen with "Pay now".
+      let paid = true;
+      if (onlineOk && state.pay !== "cash") {
+        try { await payBooking(res.id, state.pay, { name: d.patient.name, phone: state.phone }); }
+        catch { paid = false; }
+      }
+      const j = await pullBooking(res.id);
+      return { j, prescription, paid };
+    }, ({ j, prescription, paid }) => {
+      const booking = { ...bookingFromServer(j, state.remoteIds, null), prescription };
+      set({ booking, prescription: null, step: -1, arrears: booking.pay === "cash" ? 0 : state.arrears, caregiverLate: false, screen: "tracking", trail: [] });
+      if (paid) notify(msg("Request sent"), msg("{service} for {patient}, {when}. We will tell you as soon as a {who} accepts.", {
+        service: msg(d.service.name), patient: d.patient.name, when: whenMsg(d.startDate, d.slot), who: msg(d.service.nurseOnly ? "nurse" : "caregiver"),
+      }));
+    });
+
+  const liveError = server.failed
+    ? server.error instanceof FileGone
+      ? t("Add your PDF again: it was not kept when the page was reloaded.")
+      : (server.error as Error)?.message === "not-synced"
+        ? t("Your details are still being saved. Try again in a moment.")
+        : bookingProblem(server.error)
+          ? t(bookingProblem(server.error)!)
+          : t("The booking did not go through, and you have not been charged. Check your internet connection and try again.")
+    : null;
+
   return (
     <div className="screen">
-      <Header title={t("Review and pay")} onBack={() => go("caregiver")} />
+      <Header title={t("Review and pay")} onBack={() => go(live ? "schedule" : "caregiver")} />
       <div className="scroll">
         <h1>{t("Check the details")}</h1>
         <Rows items={summary} />
@@ -512,17 +578,44 @@ export function ReviewScreen() {
           {d.urgent && (
             <div className="line"><span className="muted">{t("Urgent visit charge (within 60 minutes)")}</span><span>{money(d.urgentFee)}</span></div>
           )}
-          {state.arrears > 0 && (
+          {state.arrears > 0 && !(live && state.pay !== "cash") && (
             <div className="line"><span className="muted">{t("Unpaid charge from an earlier booking")}</span><span>{money(state.arrears)}</span></div>
           )}
           <div className="line total"><span>{t("Total")}</span><span>{money(payNow)}</span></div>
         </div>
 
+        {live && (
+          <div className="stack" style={{ gap: 8 }}>
+            <h2>{t("Your preferences")}</h2>
+            <div className="wrap">
+              <Chip className="chip-toggle" selected={state.womenOnly} onClick={() => set({ womenOnly: !state.womenOnly })}>{t("Women only")}</Chip>
+              {d.languages.map((lang) => (
+                <Chip key={lang} className="chip-toggle" selected={state.language === lang} onClick={() => set({ language: state.language === lang ? null : lang })}>
+                  {t("Speaks {language}", { language: t(lang) })}
+                </Chip>
+              ))}
+            </div>
+            <p className="small muted">{t("Fewer {whoPlural} may fit when you choose these.", { whoPlural: d.whoPlural })}</p>
+          </div>
+        )}
+
+        {live && (
+          <div className="stack" style={{ gap: 6 }}>
+            <label htmlFor="booking-note">{t("Anything the {who} should know? (optional)", { who: d.who })}</label>
+            <textarea id="booking-note" className="text-input" maxLength={500} value={note} onChange={(e) => setNote(e.target.value)}
+              placeholder={t("For example: the medicine is in the fridge, or ring the bell twice.")} />
+          </div>
+        )}
+
         <div className="stack">
           <h2>{t("Pay with")}</h2>
-          {PAY_OPTIONS.map((p) => (
-            <RadioCard key={p.id} selected={state.pay === p.id} onClick={() => set({ pay: p.id })} label={t(p.label)} sub={t(p.sub)} />
-          ))}
+          {PAY_OPTIONS.map((p) => {
+            const off = live && !PAYMENTS_ON && p.id !== "cash";
+            return (
+              <RadioCard key={p.id} selected={state.pay === p.id} onClick={() => { if (!off) set({ pay: p.id }); }} label={t(p.label)}
+                sub={off ? t("Coming soon. For now, pay after the visit.") : t(p.sub)} disabled={off} />
+            );
+          })}
         </div>
 
         {contact ? (
@@ -542,12 +635,18 @@ export function ReviewScreen() {
       </div>
       <BottomBar>
         {action.failed && <ActionError>{t("The booking did not go through, and you have not been charged. Check your internet connection and try again.")}</ActionError>}
-        <button type="button" className="btn btn-primary" disabled={action.busy} onClick={confirm}>
-          {action.busy
-            ? t("Confirming…")
-            : d.isCourse
-              ? t("Confirm {n} visits · {total}", { n: d.visits, total: money(payNow) })
-              : t("Confirm booking · {total}", { total: money(payNow) })}
+        {liveError && <ActionError>{liveError}</ActionError>}
+        {live && state.booking?.live && (
+          <ActionError>{t("You already have a visit booked. Finish or cancel it before booking another.")}</ActionError>
+        )}
+        <button type="button" className="btn btn-primary" disabled={action.busy || server.busy || (live && !!state.booking?.live)} onClick={live ? confirmLive : confirm}>
+          {action.busy || server.busy
+            ? live ? t("Sending your request…") : t("Confirming…")
+            : live
+              ? state.pay !== "cash" && onlineOk ? t("Pay and send request · {total}", { total: money(payNow) }) : t("Send request · {total}", { total: money(payNow) })
+              : d.isCourse
+                ? t("Confirm {n} visits · {total}", { n: d.visits, total: money(payNow) })
+                : t("Confirm booking · {total}", { total: money(payNow) })}
         </button>
       </BottomBar>
     </div>

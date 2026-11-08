@@ -27,9 +27,9 @@ export function useCaregiverEngine() {
   const { state, update, jobs } = useCg();
   const approved = state.kycStatus === "approved" && !state.suspended; // a paused account gets no requests
 
-  // Offers and expiry: checked every second while online.
+  // Offers and expiry: checked every second while online. (Demo only: in live mode the server sends offers.)
   useEffect(() => {
-    if (!approved || !state.online) return;
+    if (!approved || !state.online || state.mode === "live") return;
     const step = () =>
       update((prev) => {
         const nowMs = Date.now();
@@ -55,7 +55,7 @@ export function useCaregiverEngine() {
     return () => clearInterval(id);
     // jobs only changes with the caregiver's city
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [approved, state.online, state.personal?.cityId]);
+  }, [approved, state.online, state.personal?.cityId, state.mode]);
 
   // Registration renewal reminder (nurses).
   const reg = regStatus(state.qualification, state.role);

@@ -2,6 +2,7 @@
 
 // ADMIN: every decision made in this panel, newest first. With the server, this also records who made it.
 
+import { LiveActivityPage } from "./LivePages";
 import { useState } from "react";
 import { useAdmin } from "@/lib/admin/store";
 import { dateTime, type AdminPage } from "@/lib/admin/data";
@@ -12,7 +13,7 @@ const PAGE_NAMES: Partial<Record<AdminPage, string>> = {
   payouts: "Payouts", reports: "Reports", settings: "Settings", team: "Team",
 };
 
-export function ActivityPage() {
+function SampleActivityPage() {
   const { state, resetDemo, log } = useAdmin();
   const toast = useToast();
   const [page, setPage] = useState("all");
@@ -56,4 +57,10 @@ export function ActivityPage() {
       </section>
     </>
   );
+}
+
+/** Signed in: from the database (1.8.0). Demo: the sample page. */
+export function ActivityPage() {
+  const { state } = useAdmin();
+  return state.mode === "live" ? <LiveActivityPage /> : <SampleActivityPage />;
 }

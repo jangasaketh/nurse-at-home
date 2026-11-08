@@ -4,13 +4,14 @@
 
 import { useState } from "react";
 import { useCg } from "@/lib/caregiver/store";
-import { ID_TYPES } from "@/lib/caregiver/data";
+import { CAREGIVER_SHARE, ID_TYPES, URGENT_SHARE, VISIT_FEE_SHARE } from "@/lib/caregiver/data";
 import { cityName, maskAccount, monthLabel, regStatus } from "@/lib/caregiver/rules";
 import { RegistrationBanner } from "./MoreScreens";
-import { SUPPORT } from "@/lib/data";
+import { NO_SHOW_MINUTES, SUPPORT, VISIT_FEE } from "@/lib/data";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
 import { InstallCard } from "../InstallCard";
+import { PushCard } from "../PushCard";
 import { LanguageChips } from "../LanguageChips";
 import { Header, Rows } from "../ui";
 
@@ -70,6 +71,13 @@ export function CgProfileScreen() {
           <InstallCard />
         </div>
 
+        {state.mode === "live" && (
+          <div className="stack">
+            <h2>{t("Notifications")}</h2>
+            <PushCard app="caregiver" userId={state.userId} lang={state.lang} live />
+          </div>
+        )}
+
         <div className="stack">
           <h2>{t("Documents")}</h2>
           <div className="list">
@@ -119,7 +127,8 @@ export function CgProfileScreen() {
           </a>
         </div>
 
-        {/* Remove this block before launch. */}
+        {/* Demo only (hidden when signed in). */}
+        {!live && (
         <div className="dashed-box stack">
           <h2>{t("Prototype tools")}</h2>
           {askReset ? (
@@ -134,6 +143,7 @@ export function CgProfileScreen() {
             <button type="button" className="link-btn" onClick={() => setAskReset(true)}>{t("Erase all data and start again")}</button>
           )}
         </div>
+        )}
 
         <button type="button" className="btn btn-danger" onClick={() => (live ? void signOut() : go("login"))}>{t("Log out")}</button>
         <div className="tiny muted" style={{ textAlign: "center" }}>{t("Version {v}", { v: process.env.NEXT_PUBLIC_APP_VERSION ?? "" })}</div>
@@ -156,10 +166,16 @@ function DocRow({ label, value, ok }: { label: string; value: string; ok: boolea
 
 /* ---------- Help ---------- */
 
+/** The numbers in the help answers follow the settings (pay split, home visit charge, waiting time). */
+const cgFaqVars = () => ({
+  pct: Math.round(CAREGIVER_SHARE * 100), feePct: Math.round(VISIT_FEE_SHARE * 100), urgentPct: Math.round(URGENT_SHARE * 100),
+  fee: `₹${VISIT_FEE}`, wait: NO_SHOW_MINUTES,
+});
+
 const CG_FAQ = [
   { q: "When do I get paid?", a: "Every Monday, for the visits you finished from Monday to Sunday. The money goes to the bank account in your profile. Cash you collected from patients is taken off the amount." },
-  { q: "How much do I earn per visit?", a: "You see the exact amount before you accept. You keep 80% of the service price, the full Rs 49 home visit charge, and half of any urgent charge." },
-  { q: "What if nobody is home?", a: "Wait 10 minutes at the door and keep calling. Then mark the visit as missed, and you get the Rs 49 home visit charge." },
+  { q: "How much do I earn per visit?", a: "You see the exact amount before you accept. You keep {pct}% of the service price, {feePct}% of the {fee} home visit charge, and {urgentPct}% of any urgent charge." },
+  { q: "What if nobody is home?", a: "Wait {wait} minutes at the door and keep calling. Then mark the visit as missed, and you get the {fee} home visit charge." },
   { q: "What if the prescription or medicine does not match?", a: "Do not give it. Tap “Something does not match”, explain kindly to the family and call support. You still get the home visit charge." },
   { q: "Can compounders give injections?", a: "No. Injections, IV drips and medication are only for registered nurses. Compounders take wound dressing, elder care dressing and vitals checks." },
   { q: "What if I feel unsafe at a visit?", a: "Leave and call 112. Press SOS on the visit screen so our team knows where you are." },
@@ -186,7 +202,7 @@ export function CgHelpScreen() {
                   <span>{t(item.q)}</span>
                   <span className="muted" style={{ transform: openQ === i ? "rotate(90deg)" : "none", display: "flex" }}><Icon name="next" size={20} /></span>
                 </button>
-                {openQ === i && <div className="faq-a">{t(item.a)}</div>}
+                {openQ === i && <div className="faq-a">{t(item.a, cgFaqVars())}</div>}
               </div>
             ))}
           </div>

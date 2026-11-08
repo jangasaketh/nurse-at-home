@@ -42,6 +42,7 @@ export function effectiveRole(s: CgState): Role | null {
 export const offerWindowMs = (job: Job) => (isUrgent(job) ? OFFER_MINUTES_URGENT : OFFER_MINUTES) * 60000;
 /** Milliseconds left to answer, or null if the request has not been offered yet. */
 export function timeLeft(job: Job, s: CgState, nowMs = Date.now()) {
+  if (job.expiresAt) return job.expiresAt - nowMs;
   const at = s.offers[job.id];
   return at === undefined ? null : at + offerWindowMs(job) - nowMs;
 }
@@ -71,7 +72,7 @@ export function matchesSettings(job: Job, s: CgState) {
   if (!servicesForRole(role).some((x) => x.id === service.id)) return false; // compounders (and lapsed registrations): no injections, drips, medication
   if (!s.availability.services.includes(service.id)) return false;
   if (job.womenOnly && s.personal?.gender !== "F") return false; // the patient asked for a woman caregiver
-  if (job.distanceKm > s.availability.radiusKm) return false;
+  if (job.distanceKm >= 0 && job.distanceKm > s.availability.radiusKm) return false;
   if (isUrgent(job)) return s.availability.urgent;
   const weekday = new Date(`${addDays(todayISO(), job.dateOffset)}T00:00:00`).getDay();
   if (!s.availability.days.includes(weekday)) return false;
@@ -82,6 +83,12 @@ export function matchesSettings(job: Job, s: CgState) {
 /** Requests waiting for this caregiver: at most three at a time, in the order they arrived. */
 export function visibleRequests(s: CgState, jobs: Job[]) {
   if (!s.online || s.kycStatus !== "approved") return [];
+  // Live mode: the server already matched these to this caregiver.
+  if (s.mode === "live") {
+    const nowMs = Date.now();
+    const mine = new Set([...s.declined, ...s.upcoming.map((j) => j.id)]);
+    return s.liveOffers.filter((j) => !mine.has(j.id) && (j.expiresAt ?? 0) > nowMs).slice(0, 5);
+  }
   const waiting = s.requestIds ?? jobs.map((j) => j.id);
   const taken = new Set([...s.declined, ...s.expired, ...s.upcoming.map((j) => j.id)]);
   const nowMs = Date.now();
@@ -116,7 +123,9 @@ export const cityName = (cityId: string) => t(CITIES.find((c) => c.id === cityId
 export const cityState = (cityId: string) => CITIES.find((c) => c.id === cityId)?.state ?? "Telangana";
 
 /** Google Maps directions to the patient's address. Works now, with no backend. */
-export const directionsUrl = (job: Job) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(job.address)}`;
+/** Google Maps directions: to the patient's pin when they set one, else to the written address. */
+export const directionsUrl = (job: Job) =>
+  `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(job.pin ? `${job.pin.lat},${job.pin.lng}` : job.address)}&travelmode=driving`;
 
 /* ---------- Verification ---------- */
 

@@ -2,7 +2,10 @@
 
 // CAREGIVER APP: carrying out a visit, step by step, then the visit record.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { MapBox } from "../MapBox";
+import { SosStatus } from "../SosStatus";
+import { kmBetween, privateCall, shareLocation, useMyPosition, type CallResult } from "@/lib/maps";
 import { useCg, type ActiveVisit, type Earning, type VisitRecord } from "@/lib/caregiver/store";
 import {
   CAREGIVER_CANCEL_REASONS, checksOf, earningFor, INJECTION_SITES, isUrgent, NEXT_DRESSING, NO_SHOW_PAY, READING_FIELDS, readingFlag,
@@ -13,7 +16,9 @@ import { patientCancelPatch } from "@/lib/caregiver/engine";
 import { SAMPLE_NEW_REVIEWS } from "@/lib/caregiver/data";
 import { ARRIVAL_CODE, LATE_MINUTES, NO_SHOW_MINUTES } from "@/lib/data";
 import { addDays, money, msg, newId, todayISO, tx, type Msg } from "@/lib/booking";
-import { useAction } from "@/lib/fake-api";
+import { useAction, useServerAction } from "@/lib/fake-api";
+import { caregiverCancel, confirmArrival, finishVisit, reportLate, visitStep } from "@/lib/caregiver/work";
+import { uploadFile, viewLinks } from "@/lib/files";
 import { t } from "@/lib/i18n";
 import type { PhotoFile } from "@/lib/prescription";
 import { Icon } from "../Icon";
@@ -36,17 +41,55 @@ const nextVisitMsg = (job: Job): Msg => ({ date: addDays(todayISO(), job.dateOff
 /* ---------- The visit ---------- */
 
 export function VisitScreen() {
-  const { state, update, set, open, go, jobById } = useCg();
+  const { state, update, set, open, go, jobById, holdWork, refreshWork } = useCg();
+  const server = useServerAction();
+  const live = state.mode === "live";
+  const [rxUrl, setRxUrl] = useState<string | null>(null);
   const [sos, setSos] = useState(false);
   const [code, setCode] = useState("");
   const [codeError, setCodeError] = useState(false);
   const [checkError, setCheckError] = useState(false);
   const [mismatch, setMismatch] = useState(false);
   const [callNote, setCallNote] = useState(false);
+  const [calling, setCalling] = useState(false);
+  const [callResult, setCallResult] = useState<CallResult | null>(null);
   const [, tick] = useState(0);
 
   const active = state.active;
   const job = active ? jobById(active.jobId) : null;
+
+  // On the way (live): follow where I am, show it on the map, and share it with the patient every 30 seconds.
+  const enRoute = live && !!job && active?.step === 1;
+  const myPos = useMyPosition(enRoute);
+  const lastShared = useRef(0);
+  useEffect(() => {
+    if (!enRoute || !job || !myPos.pos || Date.now() - lastShared.current < 30000) return;
+    lastShared.current = Date.now();
+    shareLocation(job.id, myPos.pos).catch(() => { lastShared.current = 0; });
+  }, [enRoute, job, myPos.pos]);
+
+  // Private call through our number (live), or the prototype note.
+  const callPatient = async () => {
+    if (!live || !job) { setCallNote(true); return; }
+    setCalling(true); setCallNote(true); setCallResult(null);
+    setCallResult(await privateCall("caregiver", job.id).catch(() => "failed" as const));
+    setCalling(false);
+  };
+  const callNoteText = !live
+    ? t("Calls are switched off in the prototype. In the real app they go through us, so phone numbers stay private.")
+    : callResult === "calling" ? t("We are calling you now. Pick up, and we connect you to the patient. Neither of you sees the other's number.")
+    : callResult === "not-set-up" ? t("Private calls through us are coming soon. If you cannot find the place, call our support team.")
+    : callResult === "not-allowed" ? t("Calls are possible only for a visit that is accepted and not finished.")
+    : callResult === "failed" ? t("The call could not be placed. Try again, or call our support team.")
+    : t("Connecting…");
+  // Live mode: the patient's real prescription, through a short-lived private link.
+  const rxPath = active && live ? jobById(active.jobId)?.prescriptionPath ?? null : null;
+  useEffect(() => {
+    if (!rxPath) return;
+    let gone = false;
+    void viewLinks("caregiver", "prescriptions", [rxPath]).then((links) => { if (!gone) setRxUrl(links[rxPath] ?? null); });
+    return () => { gone = true; };
+  }, [rxPath]);
 
   // Re-draw every second while the "nobody is answering" timer runs.
   useEffect(() => {
@@ -68,6 +111,12 @@ export function VisitScreen() {
   const step = active.step;
   const setActive = (patch: Partial<ActiveVisit>) => update((prev) => ({ active: prev.active ? { ...prev.active, ...patch } : null }));
   const name = job.patient.first;
+  /** Live mode: tell the server first, then move on. Demo: just move on. */
+  const toStep = (next: number, call?: () => Promise<unknown>) => {
+    if (!live || !call) return setActive({ step: next });
+    holdWork(true);
+    void server.run(call, () => { setActive({ step: next }); }).finally(() => holdWork(false));
+  };
 
   // Safety checks before care. Prescription services check the prescription and the medicine.
   const checkItems: { id: string; label: string }[] = [
@@ -88,6 +137,18 @@ export function VisitScreen() {
   const canMarkMissed = active.waitSkipped || waitLeft === 0;
 
   const endWithoutCare = (kind: "missed" | "stopped") => {
+    if (live) {
+      holdWork(true);
+      void server.run(() => finishVisit(job.id, kind, { checklist: active.checks }), (res) => {
+        const record: VisitRecord = {
+          kind, jobId: job.id, title: msg(service.name), patient: job.patient.full, at: Date.now(), note: "", details: [], readings: [], warnings: [],
+          earned: res.earned, cash: 0, nextVisit: res.next,
+        };
+        update((prev) => ({ active: null, lastRecord: record, records: [record, ...prev.records], screen: "visit-done", trail: [] }));
+        void refreshWork();
+      }).finally(() => holdWork(false));
+      return;
+    }
     const earning: Earning = { id: newId("e"), at: Date.now(), kind, title: msg(service.name), patient: `${job.patient.first} ${job.patient.full.split(" ").slice(-1)[0].charAt(0)}.`, amount: NO_SHOW_PAY, cash: 0 };
     const record: VisitRecord = {
       kind, jobId: job.id, title: msg(service.name), patient: job.patient.full, at: Date.now(), note: "", details: [], readings: [], warnings: [],
@@ -103,6 +164,13 @@ export function VisitScreen() {
   };
 
   const verifyCode = () => {
+    if (live) {
+      holdWork(true);
+      void server.run(() => confirmArrival(job.id, code), (ok) => {
+        if (ok) { setCodeError(false); setActive({ step: 3, waitStartedAt: null }); } else setCodeError(true);
+      }).finally(() => holdWork(false));
+      return;
+    }
     if (code === ARRIVAL_CODE) {
       setCodeError(false);
       setActive({ step: 3, waitStartedAt: null });
@@ -117,7 +185,7 @@ export function VisitScreen() {
         {sos && (
           <div role="alert" className="danger-box stack-sm">
             <div className="strong">{t("If you feel unsafe, leave and call 112.")}</div>
-            <div className="small">{t("Prototype: in the real app this alerts our support team with your location.")}</div>
+            {live ? <SosStatus app="caregiver" bookingId={job.id} /> : <div className="small">{t("Prototype: in the real app this alerts our support team with your location.")}</div>}
             <div className="actions">
               <a className="btn btn-danger-solid" style={{ minHeight: 48, fontSize: 16 }} href="tel:112">{t("Call 112")}</a>
               <button type="button" className="btn btn-outline" onClick={() => setSos(false)}>{t("I am safe")}</button>
@@ -141,25 +209,33 @@ export function VisitScreen() {
         {/* Step 0 and 1: getting there */}
         {step <= 1 && (
           <>
-            {step === 1 && (
+            {step === 1 && live && job.pin ? (
+              <div className="stack-xs">
+                <MapBox pin={job.pin} other={myPos.pos} centre={job.pin} label={t("Map to the patient's home")} height={200} />
+                <span className="small muted">
+                  {myPos.pos ? t("About {km} km away in a straight line. The patient can see where you are until you arrive.", { km: kmBetween(myPos.pos, job.pin).toFixed(1) })
+                    : myPos.denied ? t("Location is blocked, so the patient cannot see that you are on the way. Allow location for this site.") : t("Finding where you are…")}
+                </span>
+              </div>
+            ) : step === 1 ? (
               <div className="map">
                 <svg viewBox="0 0 350 132" preserveAspectRatio="none" fill="none" aria-hidden="true">
                   <path d="M40 96 C 110 96, 110 40, 180 40 S 260 84, 310 44" stroke="currentColor" strokeWidth="3" strokeDasharray="2 9" strokeLinecap="round" />
                   <circle cx="40" cy="96" r="8" fill="currentColor" />
                   <circle cx="310" cy="44" r="10" fill="#FFFFFF" stroke="currentColor" strokeWidth="3" />
                 </svg>
-                <div className="label">{t("Live map goes here")}</div>
+                <div className="label">{live ? t("The patient did not pin the door. Use the address and landmark.") : t("Live map goes here")}</div>
               </div>
-            )}
+            ) : null}
             <Rows items={[{ k: t("Address"), v: job.address }, { k: t("Landmark"), v: t(job.landmark) }]} />
             <div className="actions">
               <a className="btn btn-outline" href={directionsUrl(job)} target="_blank" rel="noopener noreferrer"><Icon name="pin" size={20} />{t("Directions")}</a>
-              <button type="button" className="btn btn-outline" onClick={() => setCallNote(true)}><Icon name="phone" size={20} />{t("Call")}</button>
+              <button type="button" className="btn btn-outline" disabled={calling} onClick={callPatient}><Icon name="phone" size={20} />{calling ? t("Calling…") : t("Call")}</button>
             </div>
-            {callNote && <p className="small muted">{t("Calls are switched off in the prototype. In the real app they go through us, so phone numbers stay private.")}</p>}
+            {callNote && <p className="small muted" role="status">{callNoteText}</p>}
             <div className="card stack-sm">
-              <span className="tiny muted strong">{t("From the patient")}</span>
-              <span>{t(job.note)}</span>
+              {job.note && <span className="tiny muted strong">{t("From the patient")}</span>}
+              {job.note && <span>{live ? job.note : t(job.note)}</span>}
               <span className="tiny muted strong" style={{ marginTop: 6 }}>{t("Bring")}</span>
               <span>{t(service.nurseBrings)}</span>
             </div>
@@ -168,7 +244,7 @@ export function VisitScreen() {
                 <h2>{t("Running late?")}</h2>
                 <div className="grid grid-3" role="group" aria-label={t("Running late?")}>
                   {[10, 20, 30].map((m) => (
-                    <Chip key={m} selected={active.late === m} onClick={() => setActive({ late: m })}>{m === 30 ? t("30+ min") : t("{n} min", { n: m })}</Chip>
+                    <Chip key={m} selected={active.late === m} onClick={() => { setActive({ late: m }); if (live) void reportLate(job.id, m).catch(() => {}); }}>{m === 30 ? t("30+ min") : t("{n} min", { n: m })}</Chip>
                   ))}
                 </div>
                 {active.late > 0 && (
@@ -191,8 +267,8 @@ export function VisitScreen() {
             <input id="cg-code" className="otp-input" type="tel" inputMode="numeric" value={code}
               onChange={(e) => { setCode(e.target.value.replace(/\D/g, "").slice(0, 4)); setCodeError(false); }} />
             {codeError && <div role="alert" className="error">{t("That code does not match. Ask {name} to check the code in their app.", { name })}</div>}
-            <p className="small muted">{t("Prototype: the code is {code}.", { code: ARRIVAL_CODE })}</p>
-            <button type="button" className="btn btn-primary" onClick={verifyCode}>{t("Check the code")}</button>
+            {!live && <p className="small muted">{t("Prototype: the code is {code}.", { code: ARRIVAL_CODE })}</p>}
+            <button type="button" className="btn btn-primary" disabled={server.busy || code.length !== 4} onClick={verifyCode}>{server.busy ? t("Checking…") : t("Check the code")}</button>
 
             <div className="card stack-sm" style={{ marginTop: 8 }}>
               {!active.waitStartedAt ? (
@@ -209,9 +285,9 @@ export function VisitScreen() {
                   )}
                   <span className="small muted">{t("We are also trying to reach {name}.", { name })}</span>
                   {canMarkMissed ? (
-                    <button type="button" className="btn btn-danger" onClick={() => endWithoutCare("missed")}>{t("Mark as missed · get {amount}", { amount: money(NO_SHOW_PAY) })}</button>
+                    <button type="button" className="btn btn-danger" disabled={server.busy} onClick={() => endWithoutCare("missed")}>{t("Mark as missed · get {amount}", { amount: money(job.feeEarning ?? NO_SHOW_PAY) })}</button>
                   ) : (
-                    <button type="button" className="link-btn small" onClick={() => setActive({ waitSkipped: true })}>{t("Prototype: skip the wait")}</button>
+                    !live && <button type="button" className="link-btn small" onClick={() => setActive({ waitSkipped: true })}>{t("Prototype: skip the wait")}</button>
                   )}
                 </>
               )}
@@ -223,7 +299,19 @@ export function VisitScreen() {
         {step === 3 && (
           <div className="stack">
             <h2>{t("Before you start")}</h2>
-            {service.needsPrescription && SAMPLE_RX[service.id] && (
+            {live && service.needsPrescription && (
+              <div className="stack-sm" aria-label={t("Prescription")}>
+                <span className="tiny muted strong">{t("The prescription the patient added")}</span>
+                {rxUrl ? (
+                  job.prescriptionPath?.endsWith(".pdf")
+                    ? <a className="btn btn-outline" href={rxUrl} target="_blank" rel="noopener noreferrer">{t("Open the prescription (PDF)")}</a>
+                    : <a href={rxUrl} target="_blank" rel="noopener noreferrer"><img src={rxUrl} alt={t("Prescription")} style={{ width: "100%", borderRadius: 12, border: "1px solid var(--line)" }} /></a>
+                ) : (
+                  <span className="small muted">{job.prescriptionPath ? t("Loading the prescription…") : t("No prescription photo. Ask to see the paper prescription.")}</span>
+                )}
+              </div>
+            )}
+            {!live && service.needsPrescription && SAMPLE_RX[service.id] && (
               <div className="rx-paper" aria-label={t("Prescription")}>
                 <span className="rx-sample">{t("Sample")}</span>
                 <div className="strong">{SAMPLE_RX[service.id].doctor}</div>
@@ -247,7 +335,7 @@ export function VisitScreen() {
               <div className="danger-box stack-sm" role="alert">
                 <div className="strong">{t("Do not give any medicine or start care.")}</div>
                 <div className="small">{t("Explain kindly to the family and call support. You still get the home visit charge.")}</div>
-                <button type="button" className="btn btn-danger-solid" style={{ minHeight: 48, fontSize: 16 }} onClick={() => endWithoutCare("stopped")}>{t("Stop the visit")}</button>
+                <button type="button" className="btn btn-danger-solid" style={{ minHeight: 48, fontSize: 16 }} disabled={server.busy} onClick={() => endWithoutCare("stopped")}>{t("Stop the visit")}</button>
                 <button type="button" className="btn btn-plain" onClick={() => setMismatch(false)}>{t("Everything is fine")}</button>
               </div>
             )}
@@ -255,7 +343,7 @@ export function VisitScreen() {
         )}
 
         {/* Prototype: stands in for the patient cancelling in their app, before care starts. Remove before launch. */}
-        {step <= 2 && (
+        {step <= 2 && !live && (
           <div className="dashed-box">
             <button type="button" className="link-btn small" onClick={() => update((prev) => patientCancelPatch(prev, job))}>{t("Prototype: the patient cancels")}</button>
           </div>
@@ -281,15 +369,16 @@ export function VisitScreen() {
       </div>
 
       <BottomBar>
+        {server.failed && <ActionError />}
         {step === 0 && (
           <div className="stack-sm">
-            <button type="button" className="btn btn-primary" onClick={() => setActive({ step: 1 })}>{t("Start the trip")}</button>
+            <button type="button" className="btn btn-primary" disabled={server.busy} onClick={() => toStep(1, () => visitStep(job.id, "en_route"))}>{t("Start the trip")}</button>
             <button type="button" className="btn btn-plain" onClick={() => open("cancel-visit", { openJobId: job.id })}>{t("I cannot do this visit")}</button>
           </div>
         )}
         {step === 1 && (
           <div className="stack-sm">
-            <button type="button" className="btn btn-primary" onClick={() => setActive({ step: 2 })}>{t("I have arrived")}</button>
+            <button type="button" className="btn btn-primary" disabled={server.busy} onClick={() => toStep(2, () => visitStep(job.id, "arrived"))}>{t("I have arrived")}</button>
             <button type="button" className="btn btn-plain" onClick={() => open("cancel-visit", { openJobId: job.id })}>{t("I cannot do this visit")}</button>
           </div>
         )}
@@ -297,7 +386,7 @@ export function VisitScreen() {
           <button type="button" className="btn btn-plain" onClick={() => open("cancel-visit", { openJobId: job.id })}>{t("I cannot do this visit")}</button>
         )}
         {step === 3 && (
-          <button type="button" className="btn btn-primary" onClick={() => (allChecked ? setActive({ step: 4 }) : setCheckError(true))}>{t("Start care")}</button>
+          <button type="button" className="btn btn-primary" disabled={server.busy} onClick={() => (allChecked ? toStep(4, () => visitStep(job.id, "in_progress")) : setCheckError(true))}>{t("Start care")}</button>
         )}
         {step === 4 && (
           <button type="button" className="btn btn-primary" onClick={() => set({ screen: "record", trail: ["visit"] })}>{t("Finish and write the record")}</button>
@@ -310,8 +399,10 @@ export function VisitScreen() {
 /* ---------- Visit record ---------- */
 
 export function RecordScreen() {
-  const { state, update, back, jobById } = useCg();
+  const { state, update, back, jobById, holdWork, refreshWork } = useCg();
   const action = useAction(false);
+  const server = useServerAction();
+  const live = state.mode === "live";
   const job = state.active ? jobById(state.active.jobId) : null;
   const [note, setNote] = useState("");
   const [site, setSite] = useState<string | null>(null);
@@ -372,7 +463,25 @@ export function RecordScreen() {
       value: c.id === "bp" ? `${values.bp_sys}/${values.bp_dia} mmHg` : (READING_FIELDS[c.id] ?? []).map((f) => `${values[f.id]} ${f.unit}`).join(" "),
     }));
     const cash = job.pay === "cash" ? price.total : 0;
-    // TODO: save the record through the API. The patient sees it under Records, and the family contact gets a message.
+    if (live) {
+      // Saved to the server: the patient sees it under Records straight away.
+      holdWork(true);
+      void server.run(async () => {
+        const photoPath = woundPhoto ? await uploadFile("caregiver", "visits", state.userId!, "wound", woundPhoto) : null;
+        return finishVisit(job.id, "completed", {
+          note: note.trim(), details, readings, warnings: warnings.map((w) => msg(w)), checklist: state.active?.checks ?? {}, photo_path: photoPath,
+        });
+      }, (res) => {
+        const record: VisitRecord = {
+          kind: "completed", jobId: job.id, title: msg(service.name), patient: job.patient.full, at: Date.now(), note: note.trim(), details, readings,
+          warnings: warnings.map((w) => msg(w)), earned: res.earned, cash: res.cash, nextVisit: res.next,
+        };
+        update((prev) => ({ active: null, lastRecord: record, records: [record, ...prev.records], screen: "visit-done", trail: [] }));
+        void refreshWork();
+      }).finally(() => holdWork(false));
+      return;
+    }
+    // Demo: the record stays on this phone.
     action.run(() =>
       update((prev) => {
         const { upcoming, next } = afterVisit(prev.upcoming, job, false);
@@ -469,7 +578,7 @@ export function RecordScreen() {
           <label htmlFor="cg-note">{t("What you did")}</label>
           <textarea id="cg-note" className="text-input" value={note} placeholder={t(service.note)} onChange={(e) => setNote(e.target.value)} />
           {tried && errors.note && <div role="alert" className="error">{errors.note}</div>}
-          <button type="button" className="link-btn small" onClick={() => setNote(t(service.note))}>{t("Prototype: use the sample note")}</button>
+          {!live && <button type="button" className="link-btn small" onClick={() => setNote(t(service.note))}>{t("Prototype: use the sample note")}</button>}
         </div>
 
         {warnings.length > 0 && (
@@ -489,8 +598,8 @@ export function RecordScreen() {
         {tried && Object.values(errors).some(Boolean) && <div role="alert" className="error">{t("Some details are missing. Check the messages above.")}</div>}
       </div>
       <BottomBar>
-        {action.failed && <ActionError />}
-        <button type="button" className="btn btn-primary" disabled={action.busy} onClick={save}>{action.busy ? t("Saving…") : t("Save and finish the visit")}</button>
+        {(action.failed || server.failed) && <ActionError />}
+        <button type="button" className="btn btn-primary" disabled={action.busy || server.busy} onClick={save}>{action.busy || server.busy ? t("Saving…") : t("Save and finish the visit")}</button>
       </BottomBar>
     </div>
   );
@@ -545,8 +654,9 @@ export function VisitDoneScreen() {
 /* ---------- Caregiver cannot do the visit ---------- */
 
 export function CancelVisitScreen() {
-  const { state, update, back, jobById } = useCg();
+  const { state, update, back, jobById, refreshWork } = useCg();
   const action = useAction(false);
+  const server = useServerAction();
   const [reason, setReason] = useState<string | null>(null);
   const [tried, setTried] = useState(false);
   const job = jobById(state.openJobId);
@@ -556,7 +666,18 @@ export function CancelVisitScreen() {
   const confirm = () => {
     setTried(true);
     if (!reason) return;
-    // TODO: cancel through the API: the patient is refunded in full and the request goes to other caregivers.
+    const done = () => update((prev) => ({
+      upcoming: prev.upcoming.filter((j) => j.id !== job.id),
+      active: prev.active?.jobId === job.id ? null : prev.active,
+      declined: [...prev.declined, job.id],
+      screen: "jobs",
+      trail: [],
+    }));
+    if (state.mode === "live") {
+      // The server refunds the patient in full and offers the request to other caregivers.
+      void server.run(() => caregiverCancel(job.id, reason), () => { done(); void refreshWork(); });
+      return;
+    }
     action.run(() =>
       update((prev) => ({
         upcoming: prev.upcoming.filter((j) => j.id !== job.id),
@@ -600,9 +721,9 @@ export function CancelVisitScreen() {
         {job.visits > 1 && <p className="small muted">{t("This cancels your remaining visits with this patient.")}</p>}
       </div>
       <BottomBar>
-        {action.failed && <ActionError />}
+        {(action.failed || server.failed) && <ActionError />}
         <div className="stack-sm">
-          <button type="button" className="btn btn-danger" disabled={action.busy} onClick={confirm}>{action.busy ? t("Cancelling…") : t("Cancel the visit")}</button>
+          <button type="button" className="btn btn-danger" disabled={action.busy || server.busy} onClick={confirm}>{action.busy || server.busy ? t("Cancelling…") : t("Cancel the visit")}</button>
           <button type="button" className="btn btn-plain" onClick={() => back()}>{t("Keep the visit")}</button>
         </div>
       </BottomBar>

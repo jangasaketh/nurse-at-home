@@ -2,6 +2,7 @@
 
 // ADMIN: support tickets and complaints from patients and caregivers.
 
+import { LiveSupportPage } from "./LivePages";
 import { useState } from "react";
 import { useAdmin, type TicketRow } from "@/lib/admin/store";
 import * as link from "@/lib/admin/link";
@@ -16,7 +17,7 @@ const QUICK = [
   "Thank you for telling us. We have looked into it and fixed the problem.",
 ];
 
-export function SupportPage() {
+function SampleSupportPage() {
   const { view, nowMs } = useAdmin();
   const [tab, setTab] = useState<"open" | "resolved">("open");
   const [from, setFrom] = useState("all");
@@ -133,4 +134,10 @@ function TicketDrawer({ tk, onClose }: { tk: TicketRow; onClose: () => void }) {
       )}
     </Drawer>
   );
+}
+
+/** Signed in: from the database (1.8.0). Demo: the sample page. */
+export function SupportPage() {
+  const { state } = useAdmin();
+  return state.mode === "live" ? <LiveSupportPage /> : <SampleSupportPage />;
 }

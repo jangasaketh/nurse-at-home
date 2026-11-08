@@ -10,7 +10,10 @@ import {
   addDays, canReschedule, cancelTerms, changeFee, dayAt, dayInfo, describeBooking, feeReasonText, isFreeAt, money,
   joinMsg, msg, newId, patientWhoMsg, todayISO, tx, whenMsg, type Msg, type VisitRecord,
 } from "@/lib/booking";
-import { useAction } from "@/lib/fake-api";
+import { useAction, useServerAction } from "@/lib/fake-api";
+import { awaitingPayment, bookingProblem, cancelBooking, rescheduleBooking } from "@/lib/patient-bookings";
+import { refundBooking } from "@/lib/payments";
+import { liveLate } from "@/lib/booking";
 import { t } from "@/lib/i18n";
 import { ActionError, BottomBar, Chip, Header, RadioCard, Rows } from "./ui";
 
@@ -42,8 +45,9 @@ function WaiveNote() {
 const payPlace = (pay: string): Msg => (pay === "upi" ? msg("your UPI account") : msg("your card"));
 
 export function CancelScreen() {
-  const { state, set, back, notify } = useApp();
+  const { state, set, back, notify, refresh, reload } = useApp();
   const action = useAction(state.simulateFailure);
+  const server = useServerAction();
   const [scope, setScope] = useState<"one" | "all">("one");
   const [reason, setReason] = useState<string | null>(null);
   const [tried, setTried] = useState(false);
@@ -52,7 +56,10 @@ export function CancelScreen() {
   const booking = state.booking;
   if (!booking) return <NotPossible title={t("No visit to cancel")} body={t("You have no upcoming visit.")} />;
   const b = describeBooking(booking);
-  const terms = cancelTerms(booking, state.step, b.isCourse ? scope : "one", now, state.caregiverLate);
+  const live = !!booking.live;
+  const raw = cancelTerms(booking, state.step, b.isCourse ? scope : "one", now, live ? liveLate(booking, now) : state.caregiverLate);
+  // Online booking not paid yet: nothing was taken, so nothing goes back.
+  const terms = live && awaitingPayment(booking) ? { ...raw, paidOnline: false, refund: 0, due: 0 } : raw;
   if (!terms.allowed) {
     return <NotPossible title={t("This visit cannot be cancelled now")} body={t("Care has already started. If something is wrong, press SOS on the visit screen or contact support.")} />;
   }
@@ -66,7 +73,27 @@ export function CancelScreen() {
       : msg("You have not been charged anything.");
   const moneyLine = tx(moneyMsg);
 
+  const confirmLive = () => {
+    setTried(true);
+    if (!reason) return;
+    const service = msg(b.service.name);
+    void server.run(() => cancelBooking(booking.live!.id, b.isCourse ? scope : "all", reason), (res) => {
+      const title = res.whole && b.isCourse && b.remaining > 1
+        ? msg("{service}, visits {from} to {to}", { service, from: booking.visitNo, to: booking.visits })
+        : b.isCourse ? msg("{service}, visit {n} of {total}", { service, n: booking.visitNo, total: booking.visits }) : service;
+      const moneyNow = res.refund > 0
+        ? msg("{amount} goes back to {place}.", { amount: money(res.refund), place: payPlace(booking.pay) })
+        : res.due > 0 ? msg("The {fee} home visit charge will be added to your next booking.", { fee: money(res.due) }) : msg("You have not been charged anything.");
+      notify(msg(res.whole && b.remaining > 1 ? "Visits cancelled" : "Visit cancelled"), joinMsg(". ", title, moneyNow));
+      if (res.refund > 0) void refundBooking("patient", booking.live!.id).catch(() => {}); // sent back through Razorpay
+      if (res.whole) set({ booking: null, step: 0, screen: "bookings", trail: [] });
+      else set({ screen: "bookings", trail: [] });
+      void (res.whole ? reload() : refresh());
+    });
+  };
+
   const confirm = () => {
+    if (live) return confirmLive();
     setTried(true);
     if (!reason) return;
     // TODO: cancel through the API, which also starts the refund and pays the caregiver any kept charge.
@@ -113,7 +140,7 @@ export function CancelScreen() {
             { k: t("Service"), v: serviceName },
             { k: t("When"), v: b.when },
             { k: t("Patient"), v: b.patient.full },
-            { k: t("Caregiver"), v: b.caregiver.name },
+            { k: t("Caregiver"), v: live && !booking.live?.caregiver ? t("Not assigned yet") : b.caregiver.name },
           ]}
         />
 
@@ -140,9 +167,9 @@ export function CancelScreen() {
         {terms.kept > 0 && <WaiveNote />}
       </div>
       <BottomBar>
-        {action.failed && <ActionError>{t("The visit was not cancelled. Check your internet connection and try again.")}</ActionError>}
-        <button type="button" className="btn btn-danger-solid" disabled={action.busy} onClick={confirm}>
-          {action.busy ? t("Cancelling…") : wholeCourse ? t("Cancel {n} visits", { n: b.remaining }) : t("Cancel visit")}
+        {(action.failed || server.failed) && <ActionError>{bookingProblem(server.error) ? t(bookingProblem(server.error)!) : t("The visit was not cancelled. Check your internet connection and try again.")}</ActionError>}
+        <button type="button" className="btn btn-danger-solid" disabled={action.busy || server.busy} onClick={confirm}>
+          {action.busy || server.busy ? t("Cancelling…") : wholeCourse ? t("Cancel {n} visits", { n: b.remaining }) : t("Cancel visit")}
         </button>
         <button type="button" className="btn btn-plain" onClick={() => back()}>{t("Keep my booking")}</button>
       </BottomBar>
@@ -151,8 +178,9 @@ export function CancelScreen() {
 }
 
 export function RescheduleScreen() {
-  const { state, set, back, notify } = useApp();
+  const { state, set, back, notify, refresh } = useApp();
   const action = useAction(state.simulateFailure);
+  const server = useServerAction();
   const booking = state.booking;
   const current = booking ? dayInfo(describeBooking(booking).visitDate).offset : 0;
   const [dayIdx, setDayIdx] = useState(Math.min(4, Math.max(0, current)));
@@ -167,10 +195,28 @@ export function RescheduleScreen() {
   const b = describeBooking(booking);
   const isCurrent = (s: string) => dayIdx === current && s === booking.slot;
   // Moving a visit at the last moment costs the same as cancelling it late: the caregiver held the slot.
-  const { fee, why } = changeFee(booking, state.step, now, state.caregiverLate);
+  const live = !!booking.live;
+  const { fee, why } = changeFee(booking, state.step, now, live ? liveLate(booking, now) : state.caregiverLate);
   const cash = booking.pay === "cash";
+  const withName = live && !booking.live?.caregiver ? "" : b.caregiver.name;
+
+  const saveLive = () => {
+    setTried(true);
+    if (!slot) return;
+    const newDate = addDays(todayISO(), dayIdx);
+    void server.run(() => rescheduleBooking(booking.live!.id, newDate, slot), (res) => {
+      const moved = withName
+        ? msg("{service} is now on {when}, with {name}.", { service: msg(b.service.name), when: whenMsg(newDate, slot), name: withName })
+        : msg("{service} is now on {when}.", { service: msg(b.service.name), when: whenMsg(newDate, slot) });
+      const charge = msg("The {fee} late-change charge will be added to your next booking.", { fee: money(res.fee) });
+      notify(msg("Visit moved"), res.fee === 0 ? moved : joinMsg(" ", moved, charge));
+      set({ screen: "bookings", trail: [] });
+      void refresh();
+    });
+  };
 
   const save = () => {
+    if (live) return saveLive();
     setTried(true);
     if (!slot) return;
     // TODO: move the visit through the API, which re-checks the caregiver's calendar and takes any charge.
@@ -199,7 +245,7 @@ export function RescheduleScreen() {
       <div className="scroll gap-lg">
         <div className="stack" style={{ gap: 6 }}>
           <h1>{t("Pick a new day and time")}</h1>
-          <p className="muted">{t("Now: {when}, with {name}.", { when: b.when, name: b.caregiver.name })}</p>
+          <p className="muted">{withName || !live ? t("Now: {when}, with {name}.", { when: b.when, name: b.caregiver.name }) : t("Now: {when}.", { when: b.when })}</p>
         </div>
 
         <div className="stack">
@@ -255,9 +301,9 @@ export function RescheduleScreen() {
         {fee > 0 && <WaiveNote />}
       </div>
       <BottomBar>
-        {action.failed && <ActionError>{t("The visit was not moved. Check your internet connection and try again.")}</ActionError>}
-        <button type="button" className="btn btn-primary" disabled={action.busy} onClick={save}>
-          {action.busy ? t("Saving…") : fee > 0 ? t("Save new time · {fee}", { fee: money(fee) }) : t("Save new time")}
+        {(action.failed || server.failed) && <ActionError>{bookingProblem(server.error) ? t(bookingProblem(server.error)!) : t("The visit was not moved. Check your internet connection and try again.")}</ActionError>}
+        <button type="button" className="btn btn-primary" disabled={action.busy || server.busy} onClick={save}>
+          {action.busy || server.busy ? t("Saving…") : fee > 0 ? t("Save new time · {fee}", { fee: money(fee) }) : t("Save new time")}
         </button>
       </BottomBar>
     </div>

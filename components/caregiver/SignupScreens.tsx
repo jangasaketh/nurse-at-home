@@ -2,6 +2,7 @@
 
 // CAREGIVER APP: sign in, choose a role, and get verified (KYC).
 
+import { useDemoAllowed } from "@/lib/launch";
 import { useEffect, useState, type FormEvent } from "react";
 import { authProblem, db, intlPhone } from "@/lib/supabase";
 import { authMessage } from "../AuthScreens";
@@ -55,6 +56,7 @@ export function CgLoginScreen() {
     set({ mode: "live", screen: "otp", trail: [] });
   };
   const demo = () => set({ mode: "demo", userId: null, screen: "otp", trail: [] });
+  const demoAllowed = useDemoAllowed("caregiver");
   return (
     <form className="screen screen-white login" onSubmit={submit} noValidate>
       <div className="row-inline" style={{ gap: 10 }}>
@@ -81,7 +83,7 @@ export function CgLoginScreen() {
         {error && <div role="alert" className="error">{t("Enter a 10-digit mobile number.")}</div>}
         {problem && <div role="alert" className="error">{problem}</div>}
         <button type="submit" className="btn btn-primary" style={{ marginTop: 8 }} disabled={busy}>{busy ? t("Sending…") : t("Send OTP")}</button>
-        <button type="button" className="link-btn small" onClick={demo}>{t("Try the demo (sample data, no account)")}</button>
+        {demoAllowed && <button type="button" className="link-btn small" onClick={demo}>{t("Try the demo (sample data, no account)")}</button>}
       </div>
       <div className="spacer" />
       <div className="stack-sm">

@@ -4,10 +4,12 @@
 
 import { useEffect, useState } from "react";
 import { useApp } from "@/lib/store";
-import { FAQ, HELP_TOPICS, LEGAL, SUPPORT } from "@/lib/data";
+import { FAQ, faqVars, HELP_TOPICS, LEGAL, SUPPORT } from "@/lib/data";
 import { timeAgo, tx } from "@/lib/booking";
-import { useAction, useLoad } from "@/lib/fake-api";
+import { useAction, useLoad, useServerAction } from "@/lib/fake-api";
+import { myTickets, sendTicket, type MyTicket } from "@/lib/support";
 import { t } from "@/lib/i18n";
+import { markPatientNoticesRead } from "@/lib/patient-bookings";
 import { Icon } from "./Icon";
 import { ActionError, Chip, EmptyState, ErrorState, Header, Rows, Skeleton } from "./ui";
 
@@ -20,6 +22,7 @@ export function NotificationsScreen() {
   useEffect(() => {
     if (load.status === "ready" && state.notifications.some((n) => !n.read)) {
       set({ notifications: state.notifications.map((n) => ({ ...n, read: true })) });
+      if (state.mode === "live" && state.userId) void markPatientNoticesRead(state.userId).catch(() => {});
     }
     // Only when loading finishes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -55,18 +58,29 @@ export function NotificationsScreen() {
 
 export function HelpScreen() {
   const { state, open, back } = useApp();
-  const action = useAction(state.simulateFailure);
+  const demoAction = useAction(state.simulateFailure);
+  const server = useServerAction();
+  const live = state.mode === "live" && !!state.userId;
+  const action = live ? { busy: server.busy, failed: server.failed } : demoAction;
   const [openQ, setOpenQ] = useState<number | null>(null);
   const [topic, setTopic] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [tried, setTried] = useState(false);
-  const [sent, setSent] = useState(false);
+  const [sent, setSent] = useState<string | true | null>(null);
+  const [mine, setMine] = useState<MyTicket[]>([]);
+
+  // Signed in: the reports already sent, with the team's replies.
+  const loadMine = () => { if (live) myTickets("patient").then(setMine).catch(() => {}); };
+  useEffect(loadMine, [live]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const send = () => {
     setTried(true);
     if (!topic || message.trim().length < 10) return;
-    // TODO: create a support ticket through the API.
-    action.run(() => setSent(true));
+    if (live) {
+      void server.run(() => sendTicket("patient", state.userId!, topic, message.trim(), { bookingId: state.booking?.live?.id ?? null }), (code) => { setSent(code); loadMine(); });
+      return;
+    }
+    demoAction.run(() => setSent(true));
   };
 
   return (
@@ -87,7 +101,7 @@ export function HelpScreen() {
                   <span>{t(item.q)}</span>
                   <span className="muted" style={{ transform: openQ === i ? "rotate(90deg)" : "none", display: "flex" }}><Icon name="next" size={20} /></span>
                 </button>
-                {openQ === i && <div className="faq-a">{t(item.a)}</div>}
+                {openQ === i && <div className="faq-a">{t(item.a, faqVars())}</div>}
               </div>
             ))}
           </div>
@@ -109,7 +123,7 @@ export function HelpScreen() {
           <h2>{t("Report a problem")}</h2>
           {sent ? (
             <div className="tint-box stack-sm">
-              <div className="strong">{t("We have your message")}</div>
+              <div className="strong">{typeof sent === "string" ? t("We have your message ({id})", { id: sent }) : t("We have your message")}</div>
               <div className="small" style={{ color: "var(--ink-soft)" }}>{t("Our support team will reply on +91 {phone}.", { phone: state.phone })}</div>
             </div>
           ) : (
@@ -130,6 +144,27 @@ export function HelpScreen() {
             </>
           )}
         </div>
+
+        {live && mine.length > 0 && (
+          <div className="stack">
+            <h2>{t("Your messages to support")}</h2>
+            <div className="list">
+              {mine.map((tk) => (
+                <div key={tk.id} className="list-row" style={{ alignItems: "flex-start" }}>
+                  <span className="stack-xs" style={{ flex: 1, minWidth: 0 }}>
+                    <span className="strong">{tk.code} · {t(tk.topic)}</span>
+                    <span className="small muted">{tk.message.length > 80 ? `${tk.message.slice(0, 80)}…` : tk.message}</span>
+                    <span className="tiny muted">{timeAgo(tk.at)}</span>
+                    {tk.replies.map((r, i) => (
+                      <span key={i} className="tint-box small" style={{ marginTop: 4 }}><span className="strong">{t("Reply from support")}: </span>{r.text}</span>
+                    ))}
+                  </span>
+                  <span className={`pill ${tk.status === "open" ? "pill-role" : "pill-ok"}`}>{tk.status === "open" ? t("Open") : t("Resolved")}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="list">
           <button type="button" className="list-row" onClick={() => open("legal", { legalDoc: "terms" })}>
