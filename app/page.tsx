@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { AppProvider, TAB_SCREENS, useApp } from "@/lib/store";
 import { LoginScreen, OtpScreen, SetupScreen } from "@/components/AuthScreens";
+import { PhoneScreen } from "@/components/GoogleSignIn";
 import { HomeScreen } from "@/components/HomeScreen";
 import {
   CaregiverListScreen,
@@ -22,10 +23,11 @@ import { t } from "@/lib/i18n";
 import { registerServiceWorker } from "@/lib/install";
 
 function CurrentScreen() {
-  const { state } = useApp();
+  const { state, signedIn, signOut } = useApp();
   switch (state.screen) {
     case "login": return <LoginScreen />;
     case "otp": return <OtpScreen />;
+    case "phone": return <PhoneScreen app="patient" initial="" onSaved={() => signedIn(state.userId!)} onSignOut={() => void signOut()} />;
     case "setup": return <SetupScreen />;
     case "legal": return <LegalScreen />;
     case "home": return <HomeScreen />;

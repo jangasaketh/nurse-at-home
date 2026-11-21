@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { useApp } from "@/lib/store";
 import { FAQ, faqVars, HELP_TOPICS, LEGAL, SUPPORT } from "@/lib/data";
+import { LegalDocView } from "./LegalDocView";
 import { timeAgo, tx } from "@/lib/booking";
 import { useAction, useLoad, useServerAction } from "@/lib/fake-api";
 import { myTickets, sendTicket, type MyTicket } from "@/lib/support";
@@ -173,6 +174,9 @@ export function HelpScreen() {
           <button type="button" className="list-row" onClick={() => open("legal", { legalDoc: "privacy" })}>
             <span>{t("Privacy Policy")}</span><span className="end"><Icon name="next" size={18} /></span>
           </button>
+          <button type="button" className="list-row" onClick={() => open("legal", { legalDoc: "refunds" })}>
+            <span>{t("Refund and Cancellation Policy")}</span><span className="end"><Icon name="next" size={18} /></span>
+          </button>
         </div>
       </div>
     </div>
@@ -186,13 +190,8 @@ export function LegalScreen() {
     <div className="screen screen-white">
       <Header title={t(doc.title)} onBack={() => back()} />
       <div className="scroll">
-        <h1>{t(doc.title)}</h1>
-        <div className="legal-note">
-          {t("Placeholder. The real text must be written by a lawyer before launch. These are the sections it needs to cover.")}
-        </div>
-        <ol style={{ margin: 0, paddingLeft: 22, display: "flex", flexDirection: "column", gap: 10 }}>
-          {doc.points.map((point) => <li key={point}>{t(point)}</li>)}
-        </ol>
+        {state.lang !== "en" && <div className="legal-note">{t("This page is in English for now.")}</div>}
+        <LegalDocView id={state.legalDoc} headingLevel={2} />
       </div>
     </div>
   );

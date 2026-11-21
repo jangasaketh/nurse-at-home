@@ -10,6 +10,17 @@ For every version, these all carry the same number:
 
 ---
 
+## 2.1.0 (21 Nov 2026)
+
+**Continue with Google, policy pages, business details**
+- **Continue with Google** on the patient and caregiver login screens. The button appears only once Google is switched on in Supabase (Authentication → Providers). Google accounts are asked once for a mobile number, because caregivers, SOS and the support team need one to call. The name comes from Google.
+- The mobile number can no longer be changed by a plain update from the apps. A Google account sets it once through `set_my_phone`. A number checked by SMS can never be replaced.
+- **Policy pages** (drafts for the lawyer), public at `/legal/`: Terms of Use, Privacy Policy, Refund and Cancellation Policy, Caregiver Terms and Contact us. The cancellation numbers, charges and contact details come from the live settings. They also show inside the apps, which have a new Refund policy row in Help. The login screen links to them, which Razorpay's website check needs.
+- Admin Settings → Support contacts adds business name, grievance officer and business address. These are used on the policy pages.
+- `supabase/012_google.sql`. New Telugu and Kannada text (`strings-20.ts`).
+
+---
+
 ## 2.0.0 (21 Nov 2026)
 
 **Nearest caregivers, receipts, support contacts from the admin panel**

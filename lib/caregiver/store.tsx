@@ -5,6 +5,7 @@
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { db } from "@/lib/supabase";
+import { myPhone } from "@/lib/google";
 import { forgetPushOnSignOut } from "@/lib/push";
 import { useServerSettings } from "@/lib/settings-sync";
 import { pullCaregiver, pullDocs, pullNotices, pullStatus, pushCaregiver, type CgSnapshot, type PulledCaregiver, type PulledDocs } from "./sync";
@@ -15,7 +16,7 @@ import { isUrgent, sampleJobs, slotHour, type IdType, type Job, type Role } from
 import { pullWork, pushWorkSettings, stepForStatus, type Work } from "./work";
 
 export type CgScreen =
-  | "login" | "otp" | "role"
+  | "login" | "otp" | "phone" | "role"
   | "kyc" | "kyc-personal" | "kyc-id" | "kyc-selfie" | "kyc-qualification" | "kyc-bank" | "review"
   | "jobs" | "job" | "visit" | "record" | "visit-done" | "cancel-visit"
   | "schedule" | "availability" | "earnings" | "profile" | "help" | "legal"
@@ -392,6 +393,11 @@ export function CaregiverProvider({ children }: { children: ReactNode }) {
   }, [workKey, ready, state.mode, state.userId, synced, state.cgExists, state.kycStatus, state.suspended]);
 
   const signedIn = async (userId: string) => {
+    // Google accounts have no mobile number until they give one (asked once, before anything else).
+    if (!(await myPhone("caregiver"))) {
+      setState((prev) => ({ ...prev, mode: "live", userId, screen: "phone", trail: [] }));
+      return;
+    }
     const acc = await pullCaregiver(userId);
     const docs = acc.exists ? await pullDocs(userId).catch(() => null) : null;
     lastPushed.current = acc.exists ? { lang: acc.lang, role: acc.role, personal: acc.personal } : null;

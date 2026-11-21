@@ -8,6 +8,7 @@ import { setLang, type Lang } from "./i18n";
 import type { Prescription } from "./prescription";
 import { pullAccount, pushAccount, type AccountSnapshot } from "./patient-sync";
 import { forgetPushOnSignOut } from "./push";
+import { myPhone } from "./google";
 import { db } from "./supabase";
 import { useServerSettings } from "./settings-sync";
 import {
@@ -17,7 +18,7 @@ import { refundBooking } from "./payments";
 import { SELF, newId, type Booking, type Contact, type Draft, type Msg, type Notice, type PayMethod, type VisitRecord } from "./booking";
 
 export type Screen =
-  | "login" | "otp" | "setup" | "legal"
+  | "login" | "otp" | "phone" | "setup" | "legal"
   | "home" | "service" | "schedule" | "caregivers" | "caregiver" | "review"
   | "tracking" | "done" | "cancel" | "reschedule"
   | "bookings" | "records" | "profile"
@@ -36,7 +37,7 @@ export type AppState = Draft & {
   consent: { terms: boolean; health: boolean; updates: boolean };
   contact: Contact | null; // emergency / family contact
   editingId: string | null; // family member or address being edited (null = adding a new one)
-  legalDoc: "terms" | "privacy";
+  legalDoc: "terms" | "privacy" | "refunds";
   prescription: Prescription | null; // for the booking being made
   installDismissed: boolean; // "Not now" on the Install the app card on Home
   pay: PayMethod;
@@ -311,6 +312,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const signedIn = async (userId: string) => {
     const acc = await pullAccount(userId);
+    // Google accounts have no mobile number until they give one (asked once, before anything else).
+    if (!(await myPhone("patient"))) {
+      setState((prev) => ({ ...prev, mode: "live", userId, remoteIds: {}, nameDraft: acc.name ?? "", screen: "phone", trail: [] }));
+      return;
+    }
     idsRef.current = { ...acc.remoteIds };
     lastPushed.current = acc.hasProfile ? { name: acc.name, lang: acc.lang, consented: acc.consented, patients: acc.patients, addresses: acc.addresses, contact: acc.contact } : null;
     setSynced(true);
@@ -319,7 +325,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // First sign-in on this account: ask for the name and consent. Otherwise straight to Home.
       return acc.hasProfile
         ? { ...merged, profileDone: true, screen: merged.addresses.length ? "home" : "address", trail: merged.addresses.length ? [] : ["home"], editingId: null }
-        : { ...merged, profileDone: false, nameDraft: "", screen: "setup", trail: [] };
+        : { ...merged, profileDone: false, nameDraft: acc.name || "", screen: "setup", trail: [] };
     });
     if (acc.hasProfile) await loadBookings(acc.remoteIds);
   };

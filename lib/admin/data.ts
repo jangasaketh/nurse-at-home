@@ -177,7 +177,7 @@ export type Settings = {
   renewalWarnDays: number;
   cities: CitySetting[];
   paymentsOn?: boolean; // online payment (UPI, card) switched on; signed-in apps only
-  support?: { phone: string; whatsapp: string; email: string; hours: string }; // shown in the apps' Help (2.0.0)
+  support?: { phone: string; whatsapp: string; email: string; hours: string; business?: string; address?: string; grievance?: string }; // shown in the apps' Help (2.0.0) and on the public policy pages (2.1.0)
 };
 
 export const DEFAULT_SETTINGS: Settings = {

@@ -335,33 +335,11 @@ export const FAQ = [
 /** The numbers in the FAQ answers (they follow the settings). */
 export const faqVars = () => ({ grace: GRACE_MINUTES, hours: FREE_UNTIL_HOURS, late: LATE_MINUTES, wait: NO_SHOW_MINUTES });
 
-// PLACEHOLDER legal pages. A lawyer must write the real text. These are only the headings to cover.
+// Policy pages: the full text is in lib/legal.ts (2.1.0). These are the titles the app screens use.
 export const LEGAL = {
-  terms: {
-    title: "Terms of Use",
-    points: [
-      "Who can use the app, and booking on behalf of family members",
-      "What the service is: connecting patients with verified nurses and compounders. It is not an emergency service",
-      "Prescription rule for injections, IV drips and medication",
-      "Bookings, cancellations and refunds",
-      "Prices, payments and the urgent visit charge",
-      "Behaviour and safety during a home visit",
-      "Limits of liability",
-      "Complaints and the grievance officer",
-    ],
-  },
-  privacy: {
-    title: "Privacy Policy",
-    points: [
-      "What we collect: phone number, name, address, family members, prescriptions, visit notes and readings, location during a visit",
-      "Why we collect it, and the consent you gave",
-      "Who sees it: the caregiver you book, and the family contact you choose",
-      "How it is stored and protected",
-      "Your rights: to see, correct or delete your data, and to withdraw consent",
-      "How long records are kept",
-      "Who to contact with a complaint",
-    ],
-  },
+  terms: { title: "Terms of Use" },
+  privacy: { title: "Privacy Policy" },
+  refunds: { title: "Refund and Cancellation Policy" },
 };
 
 /* ---------- Services and prices set in the admin panel ---------- */

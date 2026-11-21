@@ -6,6 +6,8 @@ import { useDemoAllowed } from "@/lib/launch";
 import { useEffect, useState, type FormEvent } from "react";
 import { authProblem, db, intlPhone } from "@/lib/supabase";
 import { authMessage } from "../AuthScreens";
+import { GoogleButton } from "../GoogleSignIn";
+import { googleProblem, useGoogleReturn } from "@/lib/google";
 import { sendForVerification } from "@/lib/caregiver/sync";
 import { FileGone } from "@/lib/files";
 import { approvalPatch, useCg, KYC_STEPS, type CgState, type KycStep, type Qualification } from "@/lib/caregiver/store";
@@ -40,10 +42,12 @@ const fixPatch = (state: CgState, step: KycStep): Partial<CgState> =>
 /* ---------- Sign in ---------- */
 
 export function CgLoginScreen() {
-  const { state, set } = useCg();
+  const { state, set, signedIn } = useCg();
   const [error, setError] = useState(false);
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState(false);
+  // Back from Google: finish signing in.
+  useGoogleReturn("caregiver", async (id) => { setBusy(true); try { await signedIn(id); } finally { setBusy(false); } }, (kind) => setProblem(t(googleProblem(kind))));
   // Real sign-in: a 6-digit code by SMS (or the fixed code of a test number).
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -83,6 +87,7 @@ export function CgLoginScreen() {
         {error && <div role="alert" className="error">{t("Enter a 10-digit mobile number.")}</div>}
         {problem && <div role="alert" className="error">{problem}</div>}
         <button type="submit" className="btn btn-primary" style={{ marginTop: 8 }} disabled={busy}>{busy ? t("Sending…") : t("Send OTP")}</button>
+        <GoogleButton app="caregiver" path="/caregiver/" onError={setProblem} />
         {demoAllowed && <button type="button" className="link-btn small" onClick={demo}>{t("Try the demo (sample data, no account)")}</button>}
       </div>
       <div className="spacer" />
