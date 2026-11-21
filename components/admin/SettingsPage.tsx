@@ -226,10 +226,10 @@ export function SettingsPage() {
       {tab === "support" && (
         <section className="acard adm-col" style={{ gap: 12 }}>
           <h2>Support contacts</h2>
-          <p className="adm-small adm-muted" style={{ margin: 0 }}>Shown in Help in the patient and caregiver apps (signed in). Leave a box empty to show the placeholder.</p>
+          <p className="adm-small adm-muted" style={{ margin: 0 }}>Shown in Help in the patient and caregiver apps, and on the public policy pages (Terms, Privacy, Refunds, Contact) that Razorpay checks. Leave a box empty to show the placeholder.</p>
           {live ? (
             <div className="agrid agrid-2">
-              {([["phone", "Support phone", "+91 90000 00000"], ["whatsapp", "WhatsApp number", "+91 90000 00000"], ["email", "Support email", "help@yourdomain.in"], ["hours", "Support hours", "7 AM to 10 PM, every day"]] as const).map(([key, label, ph]) => (
+              {([["phone", "Support phone", "+91 90000 00000"], ["whatsapp", "WhatsApp number", "+91 90000 00000"], ["email", "Support email", "help@yourdomain.in"], ["hours", "Support hours", "7 AM to 10 PM, every day"], ["business", "Business name (as on your PAN)", "Your registered business name"], ["grievance", "Grievance officer (name)", "Full name"], ["address", "Business address", "Street, area, city, PIN"]] as const).map(([key, label, ph]) => (
                 <Field key={key} id={`st-support-${key}`} label={label} placeholder={ph} value={draft.support?.[key] ?? ""}
                   onChange={(v) => setDraft((d) => ({ ...d, support: { phone: "", whatsapp: "", email: "", hours: "", ...(d.support ?? {}), [key]: v } }))} />
               ))}

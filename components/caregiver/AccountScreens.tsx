@@ -2,6 +2,7 @@
 
 // CAREGIVER APP: profile, help and support, terms and code of conduct.
 
+import { LegalDocView } from "../LegalDocView";
 import { DeleteAccount } from "../DeleteAccount";
 import { useState } from "react";
 import { useCg } from "@/lib/caregiver/store";
@@ -228,7 +229,7 @@ export function CgHelpScreen() {
   );
 }
 
-/* ---------- Terms and Code of Conduct (placeholders) ---------- */
+/* ---------- Caregiver Terms (full text in lib/legal.ts) and Code of Conduct ---------- */
 
 const CG_LEGAL = {
   terms: {
@@ -261,12 +262,20 @@ const CG_LEGAL = {
 export function CgLegalScreen() {
   const { state, back } = useCg();
   const doc = CG_LEGAL[state.legalDoc];
+  if (state.legalDoc === "terms") return (
+    <div className="screen screen-white">
+      <Header title={t(doc.title)} onBack={() => back()} />
+      <div className="scroll">
+        {state.lang !== "en" && <div className="legal-note">{t("This page is in English for now.")}</div>}
+        <LegalDocView id="caregivers" headingLevel={2} />
+      </div>
+    </div>
+  );
   return (
     <div className="screen screen-white">
       <Header title={t(doc.title)} onBack={() => back()} />
       <div className="scroll">
         <h1>{t(doc.title)}</h1>
-        <div className="legal-note">{t("Placeholder. The real text must be written by a lawyer before launch. These are the sections it needs to cover.")}</div>
         <ol style={{ margin: 0, paddingLeft: 22, display: "flex", flexDirection: "column", gap: 10 }}>
           {doc.points.map((point) => <li key={point}>{t(point)}</li>)}
         </ol>

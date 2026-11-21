@@ -15,6 +15,7 @@ Project: `https://hglhijvvbbmmsjoakvfz.supabase.co` (region South Asia, Mumbai).
 | `009_accounts.sql` | Part 9 (version 1.9.0): two-step sign-in enforced by the database for team members who set it up, family members and addresses with past visits hidden instead of deleted, "Delete my account", phone notifications sent by the database itself (no webhook step), safety tidy-up. | Run after 008. Shows "Account functions are ready". Safe to run again. |
 | `010_push_keys.sql` | Part 10 (version 1.9.1): the push keys are made by the `push-setup` server program and kept encrypted in the Vault; nobody copies keys. | Run after 009. Then deploy `push-setup` (Verify JWT OFF) and press Make push keys in the admin panel. |
 | `011_nearby_receipts.sql` | Part 11 (version 2.0.0): requests go only to caregivers within their distance (when both pins are set), caregivers see how far a request is, and patients get receipts. | Run after 010. If 004, 005 or 007 are ever run again, run 011 after them (it replaces two of their functions). |
+| `012_google.sql` | Part 12 (version 2.1.0): Continue with Google. New accounts take the name from Google, Google accounts give a mobile number once (`set_my_phone`), and the apps cannot change the number with a plain update. | Run after 011. |
 
 **Phone sign-in for testing:** Authentication → Sign In / Providers → Phone → switch on, and add test numbers with fixed codes (for example `919876543210=123456`). No SMS is sent to test numbers. Real SMS needs DLT registration (India) and an SMS provider.
 
@@ -80,3 +81,15 @@ Run `008_launch.sql`. Then the admin panel's **Settings → Launch** shows a che
 **Keys.** The project URL and the publishable key (`sb_publishable_…`) go into the apps; they are safe to be public because the access rules decide what each person can see. The secret key (`sb_secret_…`) and the database password must never be put in the apps, in GitHub, or in a chat.
 
 **Tested** on PostgreSQL 16 with stand-ins for Supabase's sign-in and storage: each kind of person (visitor, two patients, two caregivers, owner, verification, support) can do only what the rules allow. Prices are set by the database, a prescription is required where the rules say, caregivers cannot approve themselves or go online before approval, and only the assigned caregiver sees the patient's address and prescription.
+
+
+## Continue with Google (2.1.0)
+
+1. **Google Cloud Console** (console.cloud.google.com):
+   - Create a project.
+   - Go to **APIs and Services → OAuth consent screen**. Choose External, enter the app name "Nurse at Home" and your support email, and add the authorised domain `supabase.co`. Then publish it.
+   - Go to **Credentials → Create credentials → OAuth client ID**, choose Web application, and add this authorised redirect URI: `https://hglhijvvbbmmsjoakvfz.supabase.co/auth/v1/callback`.
+   - Copy the Client ID and Client secret.
+2. **Supabase**: go to Authentication → Sign In / Providers → Google, turn it on, paste the Client ID and Client secret, and save.
+3. **Supabase**: go to Authentication → URL Configuration and check that the Redirect URLs include both `https://jangasaketh.github.io/nurse-at-home/` and `https://jangasaketh.github.io/nurse-at-home/caregiver/`. A single `https://jangasaketh.github.io/nurse-at-home/**` covers both.
+4. Open the apps. The **Continue with Google** button appears on its own.

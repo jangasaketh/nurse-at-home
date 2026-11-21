@@ -17,17 +17,19 @@ import { AvailabilityScreen, EarningsScreen, ScheduleScreen } from "./WorkScreen
 import { CgHelpScreen, CgLegalScreen, CgProfileScreen } from "./AccountScreens";
 import { CgNotificationsScreen, PatientCancelledScreen, PayoutsScreen, RatingsScreen, RenewScreen, ReportScreen, SuspendedScreen } from "./MoreScreens";
 import { useCaregiverEngine } from "@/lib/caregiver/engine";
+import { PhoneScreen } from "../GoogleSignIn";
 
 // Screens a paused caregiver can still open.
 const WHILE_PAUSED: CgScreen[] = ["report", "notifications", "help", "legal", "ratings", "payouts"];
 
 function CurrentScreen() {
-  const { state } = useCg();
+  const { state, signedIn, signOut } = useCg();
   // Paused by the admin team: show why, instead of jobs and visits.
   if (state.kycStatus === "approved" && state.suspended && !WHILE_PAUSED.includes(state.screen)) return <SuspendedScreen />;
   switch (state.screen) {
     case "login": return <CgLoginScreen />;
     case "otp": return <CgOtpScreen />;
+    case "phone": return <PhoneScreen app="caregiver" initial="" onSaved={() => signedIn(state.userId!)} onSignOut={() => void signOut()} />;
     case "role": return <RoleScreen />;
     case "kyc": return <KycScreen />;
     case "kyc-personal": return <PersonalScreen />;

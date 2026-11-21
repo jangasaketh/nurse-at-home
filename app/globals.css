@@ -367,3 +367,25 @@ a.btn-danger-solid { color: #ffffff; }
 .bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
 .bar span { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
 .notice-icon.kind-message { background: #e5edf7; color: #1d4e89; }
+
+/* Continue with Google (2.1.0) */
+.btn-google { min-height: 50px; border: 1.5px solid #c4ccc8; background: #ffffff; color: #1f1f1f; font-size: 16px; font-weight: 600; }
+.or-line { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 14px; margin: 4px 0; }
+.or-line::before, .or-line::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+/* Public policy pages (2.1.0) */
+.legal-page { min-height: 100vh; background: #ffffff; color: var(--ink); padding: 0 16px 48px; }
+.legal-nav { max-width: 760px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 16px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+.legal-nav a { color: var(--primary); text-decoration: none; min-height: 32px; display: inline-flex; align-items: center; }
+.legal-nav a[aria-current="page"] { font-weight: 600; text-decoration: underline; }
+.legal-brand { font-family: var(--display); font-weight: 700; color: var(--ink) !important; margin-right: auto; }
+.legal-doc { max-width: 760px; margin: 0 auto; line-height: 1.6; }
+.legal-doc h1 { margin: 24px 0 4px; font-size: 30px; }
+.legal-doc h2 { margin: 0 0 4px; font-size: 24px; }
+.legal-doc h3 { margin: 22px 0 6px; font-size: 18px; }
+.legal-doc p { margin: 0 0 10px; }
+.legal-meta { color: var(--muted); font-size: 14px; }
+.legal-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.legal-list li { display: flex; flex-direction: column; }
+.legal-list a { color: var(--primary); font-weight: 600; font-size: 18px; }
+.legal-list span { color: var(--muted); }
