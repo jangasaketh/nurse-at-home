@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { applyServices, BUILT_IN_SERVICES, setPaymentsOn, setRules, VITAL_CHECKS, VITALS_SERVICE_ID, type ServiceSetting } from "./data";
+import { applyServices, BUILT_IN_SERVICES, setPaymentsOn, setRules, setSupport, VITAL_CHECKS, VITALS_SERVICE_ID, type ServiceSetting, type SupportContacts } from "./data";
 import { setPaySettings } from "./caregiver/data";
 import type { IconName } from "@/components/Icon";
 
@@ -32,6 +32,7 @@ export type ServerSettings = {
   renewalWarnDays: number;
   cities: CityRow[];
   paymentsOn: boolean; // online payment switched on (Settings → Payments)
+  support?: SupportContacts; // support phone, WhatsApp, email and hours (2.0.0)
 };
 
 type Row = Record<string, unknown>;
@@ -48,7 +49,7 @@ export async function pullSettings(client: SupabaseClient): Promise<ServerSettin
   ]);
   for (const r of [settings, services, checks, cities, areas]) if (r.error) throw r.error;
   const v = (key: string): Row => ((settings.data ?? []).find((r) => r.key === key)?.value as Row) ?? {};
-  const charges = v("charges"), rule = v("cancel_rule"), pay = v("pay_split"), limits = v("time_limits"), payments = v("payments");
+  const charges = v("charges"), rule = v("cancel_rule"), pay = v("pay_split"), limits = v("time_limits"), payments = v("payments"), support = v("support");
   return {
     services: (services.data ?? []).map((s) => {
       const base = BUILT_IN_SERVICES.find((b) => b.id === s.id);
@@ -75,6 +76,7 @@ export async function pullSettings(client: SupabaseClient): Promise<ServerSettin
     offerMinutesUrgent: num(limits.offerMinutesUrgent, 3),
     renewalWarnDays: num(limits.renewalWarnDays, 60),
     paymentsOn: payments.enabled === true,
+    support: { phone: String(support.phone ?? ""), whatsapp: String(support.whatsapp ?? ""), email: String(support.email ?? ""), hours: String(support.hours ?? "") },
     cities: (cities.data ?? []).map((c) => ({
       id: c.id, name: c.name, state: c.state, language: c.language, open: !!c.open,
       areas: (areas.data ?? []).filter((a) => a.city_id === c.id).map((a) => a.name as string),
@@ -86,6 +88,7 @@ export async function pullSettings(client: SupabaseClient): Promise<ServerSettin
 export function applyServerSettings(st: ServerSettings) {
   applyServices(st.services, st.checks);
   setPaymentsOn(!!st.paymentsOn);
+  setSupport(st.support);
   setRules({ visitFee: st.visitFee, urgentFee: st.urgentFee, timed: st.timed, graceMinutes: st.graceMinutes, freeUntilHours: st.freeUntilHours, lateMinutes: st.lateMinutes, noShowMinutes: st.noShowMinutes });
   setPaySettings({ caregiverShare: st.caregiverShare, visitFeeShare: st.visitFeeShare, urgentShare: st.urgentShare, payoutDay: st.payoutDay, offerMinutes: st.offerMinutes, offerMinutesUrgent: st.offerMinutesUrgent, renewalWarnDays: st.renewalWarnDays });
 }
@@ -116,6 +119,7 @@ export async function pushSettings(client: SupabaseClient, userId: string, prev:
     ["time_limits", { offerMinutes: next.offerMinutes, offerMinutesUrgent: next.offerMinutesUrgent, renewalWarnDays: next.renewalWarnDays },
       { offerMinutes: prev.offerMinutes, offerMinutesUrgent: prev.offerMinutesUrgent, renewalWarnDays: prev.renewalWarnDays }],
     ["payments", { enabled: !!next.paymentsOn }, { enabled: !!prev.paymentsOn }],
+    ["support", { ...(next.support ?? {}) }, { ...(prev.support ?? {}) }],
   ];
   const settingRows = groups.filter(([, n, p]) => !same(n, p)).map(([key, value]) => ({ key, value, updated_at: now, updated_by: userId }));
   if (settingRows.length) {

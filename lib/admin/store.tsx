@@ -356,6 +356,7 @@ function fromServer(st: ServerSettings, prev: Settings): Settings {
     lateMinutes: st.lateMinutes, noShowMinutes: st.noShowMinutes, caregiverShare: st.caregiverShare, visitFeeShare: st.visitFeeShare,
     urgentShare: st.urgentShare, payoutDay: st.payoutDay, offerMinutes: st.offerMinutes, offerMinutesUrgent: st.offerMinutesUrgent,
     renewalWarnDays: st.renewalWarnDays, cities: st.cities.length ? st.cities : prev.cities, paymentsOn: st.paymentsOn,
+    support: st.support ?? prev.support,
   };
 }
 
@@ -365,5 +366,6 @@ function toServer(s: Settings, base: ServerSettings): ServerSettings {
     freeUntilHours: s.freeUntilHours, lateMinutes: s.lateMinutes, noShowMinutes: s.noShowMinutes, caregiverShare: s.caregiverShare,
     visitFeeShare: s.visitFeeShare, urgentShare: s.urgentShare, payoutDay: s.payoutDay, offerMinutes: s.offerMinutes,
     offerMinutesUrgent: s.offerMinutesUrgent, renewalWarnDays: s.renewalWarnDays, cities: s.cities, paymentsOn: !!s.paymentsOn,
+    support: s.support ?? base.support,
   };
 }

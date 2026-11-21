@@ -3,6 +3,8 @@
 // CAREGIVER APP: schedule of accepted visits, work settings, and earnings.
 
 import { useState } from "react";
+import { MapBox } from "../MapBox";
+import { cityCentre, currentPosition, inIndia } from "@/lib/maps";
 import { useCg, type Availability } from "@/lib/caregiver/store";
 import { CAREGIVER_SHARE, DAYS, HOURS, isUrgent, RADIUS_KM, serviceOf, servicesForRole, slotHour, URGENT_SHARE, type Job } from "@/lib/caregiver/data";
 import { maskAccount, nextPayoutText, weekStart, weekTotals } from "@/lib/caregiver/rules";
@@ -99,6 +101,19 @@ export function AvailabilityScreen() {
   const allowed = servicesForRole(role).map((s) => s.id);
   const [a, setA] = useState<Availability>({ ...state.availability, services: state.availability.services.filter((id) => allowed.includes(id)) });
   const [tried, setTried] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [locError, setLocError] = useState("");
+  const live = state.mode === "live";
+  const useHere = async () => {
+    setLocating(true); setLocError("");
+    try {
+      const p = await currentPosition();
+      if (inIndia(p)) setA((x) => ({ ...x, base: p })); else setLocError(t("That location is outside India. Move the pin to the address instead."));
+    } catch (e) {
+      setLocError((e as Error).message === "denied" ? t("Location is blocked for this site. Tap the map where the house is instead.") : t("Could not find your location. Tap the map where the house is instead."));
+    }
+    setLocating(false);
+  };
   const errors = {
     days: a.days.length === 0 ? t("Choose at least one day.") : "",
     hours: slotHour(a.end) <= slotHour(a.start) ? t("The end time must be after the start time.") : "",
@@ -145,6 +160,19 @@ export function AvailabilityScreen() {
             {RADIUS_KM.map((km) => <Chip key={km} selected={a.radiusKm === km} onClick={() => setA({ ...a, radiusKm: km })}>{t("{km} km", { km })}</Chip>)}
           </div>
         </div>
+        {live && (
+          <div className="stack" style={{ gap: 8 }}>
+            <span className="label" id="cg-base-label">{t("Where you start from")}</span>
+            <span className="small muted">{t("Pin your home or usual starting point. You then get requests only within the distance above. Without a pin, you get requests from your whole city.")}</span>
+            <MapBox pin={a.base ?? null} centre={a.base ?? cityCentre(state.personal?.cityId ?? "hyd")} onPin={(p) => { if (inIndia(p)) { setA((x) => ({ ...x, base: p })); setLocError(""); } }} label={t("Map of where you start from")} height={200} />
+            <div className="row-inline" style={{ gap: 8, flexWrap: "wrap" }}>
+              <button type="button" className="btn btn-outline btn-sm" onClick={() => void useHere()} disabled={locating}><Icon name="pin" size={18} />{locating ? t("Finding you…") : t("Use my current location")}</button>
+              {a.base && <button type="button" className="btn btn-plain btn-sm" onClick={() => setA((x) => ({ ...x, base: null }))}>{t("Remove the pin")}</button>}
+            </div>
+            {a.base && <span className="small ok-text" role="status">{t("Pin set")}</span>}
+            {locError && <span className="small error" role="alert">{locError}</span>}
+          </div>
+        )}
         <div className="stack" style={{ gap: 8 }}>
           <span className="label">{t("Services you offer")}</span>
           {SERVICES.map((s) =>

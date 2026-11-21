@@ -42,7 +42,7 @@ export const KYC_STEPS: KycStep[] = ["personal", "id", "selfie", "qualification"
 
 export type KycStatus = "draft" | "submitted" | "approved" | "rejected";
 
-export type Availability = { days: number[]; start: string; end: string; radiusKm: number; services: string[]; urgent: boolean };
+export type Availability = { days: number[]; start: string; end: string; radiusKm: number; services: string[]; urgent: boolean; base?: { lat: number; lng: number } | null };
 
 /** One visit being carried out. */
 export type ActiveVisit = {

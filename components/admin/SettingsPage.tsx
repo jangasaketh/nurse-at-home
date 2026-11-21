@@ -13,7 +13,7 @@ import { PushKeys } from "./PushKeys";
 import { LaunchPanel } from "./LaunchPanel";
 import { Badge, Field, PageHead, Select, Tabs, useToast } from "./ui";
 
-type Tab = "prices" | "rules" | "pay" | "limits" | "cities" | "payments" | "notifications" | "maps" | "launch";
+type Tab = "prices" | "rules" | "pay" | "limits" | "cities" | "payments" | "notifications" | "maps" | "launch" | "support";
 
 const DEMO_LIVE = <div className="anote ok adm-small"><b>Live in this demo.</b> The patient and caregiver apps use this list (prices, services switched off, who can do them, new services) when opened in this browser.</div>;
 const DEMO_LATER = <div className="anote info adm-small"><b>Saved here.</b> In the demo, the apps keep their built-in numbers. Signed in with a team account, these are saved to the server.</div>;
@@ -100,6 +100,7 @@ export function SettingsPage() {
     for (const c of VITAL_CHECKS) if (draft.checks[c.id] !== before.checks[c.id]) diffs.push(`${c.name} ${money(before.checks[c.id])} → ${money(draft.checks[c.id])}`);
     for (const f of NUM_FIELDS) if (draft[f.key] !== before[f.key]) diffs.push(`${f.label}: ${before[f.key]} → ${draft[f.key]}`);
     if (!!draft.paymentsOn !== !!before.paymentsOn) diffs.push(`Online payment switched ${draft.paymentsOn ? "on" : "off"}`);
+    if (JSON.stringify(draft.support ?? {}) !== JSON.stringify(before.support ?? {})) diffs.push("Support contacts changed");
     if (draft.payoutDay !== before.payoutDay) diffs.push(`Payout day: ${WEEKDAYS[before.payoutDay]} → ${WEEKDAYS[draft.payoutDay]}`);
     for (const c of draft.cities) {
       const old = before.cities.find((x) => x.id === c.id);
@@ -188,7 +189,7 @@ export function SettingsPage() {
       {changed && <div className="anote" role="status">You have unsaved changes.</div>}
       <Tabs label="Settings sections" value={tab} onChange={setTab} tabs={[
         { id: "prices", label: "Services and prices" }, { id: "rules", label: "Charges and cancellation" }, { id: "pay", label: "Pay split" }, { id: "limits", label: "Time limits" }, { id: "cities", label: "Cities and areas" },
-        { id: "payments", label: "Payments" }, { id: "notifications", label: "Notifications and SMS" }, { id: "maps", label: "Maps and calls" }, { id: "launch", label: "Launch" },
+        { id: "payments", label: "Payments" }, { id: "notifications", label: "Notifications and SMS" }, { id: "maps", label: "Maps and calls" }, { id: "support", label: "Support contacts" }, { id: "launch", label: "Launch" },
       ]} />
 
       {tab === "launch" && (
@@ -219,6 +220,23 @@ export function SettingsPage() {
             <li><b>Secrets</b> (Edge Functions → Secrets): <code>EXOTEL_SID</code>, <code>EXOTEL_API_KEY</code>, <code>EXOTEL_API_TOKEN</code> (Exotel → Settings → API), <code>EXOTEL_CALLER_ID</code> (your ExoPhone) and <code>EXOTEL_SUBDOMAIN</code> (<code>api.exotel.com</code>, or <code>api.in.exotel.com</code> for a Mumbai-region account).</li>
             <li><b>Test</b> with a visit that a caregiver has accepted: tap Call in either app. Exotel rings the person who tapped, then connects the other.</li>
           </ol>
+        </section>
+      )}
+
+      {tab === "support" && (
+        <section className="acard adm-col" style={{ gap: 12 }}>
+          <h2>Support contacts</h2>
+          <p className="adm-small adm-muted" style={{ margin: 0 }}>Shown in Help in the patient and caregiver apps (signed in). Leave a box empty to show the placeholder.</p>
+          {live ? (
+            <div className="agrid agrid-2">
+              {([["phone", "Support phone", "+91 90000 00000"], ["whatsapp", "WhatsApp number", "+91 90000 00000"], ["email", "Support email", "help@yourdomain.in"], ["hours", "Support hours", "7 AM to 10 PM, every day"]] as const).map(([key, label, ph]) => (
+                <Field key={key} id={`st-support-${key}`} label={label} placeholder={ph} value={draft.support?.[key] ?? ""}
+                  onChange={(v) => setDraft((d) => ({ ...d, support: { phone: "", whatsapp: "", email: "", hours: "", ...(d.support ?? {}), [key]: v } }))} />
+              ))}
+            </div>
+          ) : (
+            <div className="anote info adm-small">Sign in with a team account to set the support contacts. The demo shows placeholders.</div>
+          )}
         </section>
       )}
 

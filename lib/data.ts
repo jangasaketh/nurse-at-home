@@ -285,12 +285,18 @@ export const CANCEL_REASONS = [
 ];
 
 // PLACEHOLDERS: put your real support details here before launch.
-export const SUPPORT = {
+export type SupportContacts = { phone: string; whatsapp: string; email: string; hours: string };
+export const SUPPORT_PLACEHOLDER: SupportContacts = {
   phone: "[Your support number]",
   whatsapp: "[Your WhatsApp number]",
   email: "[Your support email]",
   hours: "[Your support hours]",
 };
+/** Support contacts shown in Help. From 2.0.0 set in the admin panel (Settings → Launch); these are the fallbacks. */
+export const SUPPORT: SupportContacts = { ...SUPPORT_PLACEHOLDER };
+export function setSupport(c: Partial<SupportContacts> | null | undefined) {
+  for (const k of ["phone", "whatsapp", "email", "hours"] as const) SUPPORT[k] = (c?.[k] ?? "").trim() || SUPPORT_PLACEHOLDER[k];
+}
 
 export const HELP_TOPICS = ["A visit that went wrong", "Payment or refund", "The app is not working", "Something else"];
 
