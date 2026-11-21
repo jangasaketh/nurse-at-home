@@ -2,6 +2,7 @@
 
 // CAREGIVER APP: profile, help and support, terms and code of conduct.
 
+import { DeleteAccount } from "../DeleteAccount";
 import { useState } from "react";
 import { useCg } from "@/lib/caregiver/store";
 import { CAREGIVER_SHARE, ID_TYPES, URGENT_SHARE, VISIT_FEE_SHARE } from "@/lib/caregiver/data";
@@ -146,6 +147,7 @@ export function CgProfileScreen() {
         )}
 
         <button type="button" className="btn btn-danger" onClick={() => (live ? void signOut() : go("login"))}>{t("Log out")}</button>
+        {live && <DeleteAccount app="caregiver" onDeleted={() => void signOut()} />}
         <div className="tiny muted" style={{ textAlign: "center" }}>{t("Version {v}", { v: process.env.NEXT_PUBLIC_APP_VERSION ?? "" })}</div>
       </div>
     </div>

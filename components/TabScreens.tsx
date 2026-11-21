@@ -1,5 +1,6 @@
 "use client";
 
+import { DeleteAccount } from "./DeleteAccount";
 import { useState } from "react";
 import { useApp, type Screen } from "@/lib/store";
 import { SELF, canReschedule, describeBooking, formatAddress, patientMeta, tx } from "@/lib/booking";
@@ -332,6 +333,7 @@ export function ProfileScreen() {
 
         {/* Live: sign out of the account and clear this phone. Demo: back to the login screen, keeping the demo data. */}
         <button type="button" className="btn btn-danger" onClick={() => (live ? void signOut() : go("login"))}>{t("Log out")}</button>
+        {live && <DeleteAccount app="patient" onDeleted={() => void signOut()} />}
         <div className="tiny muted" style={{ textAlign: "center" }}>{t("Version {v}", { v: process.env.NEXT_PUBLIC_APP_VERSION ?? "" })}</div>
       </div>
     </div>

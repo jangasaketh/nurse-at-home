@@ -12,6 +12,7 @@ Project: `https://hglhijvvbbmmsjoakvfz.supabase.co` (region South Asia, Mumbai).
 | `006_notifications.sql` | Part 6 (version 1.6.0): notifications on the phone. Saves each phone's push address (`push_subscriptions`, each person sees only their own) and lets the "push" Edge Function take each notification once. | SQL Editor → New query → paste → Run, after 005. Shows "Notification tables are ready". Safe to run again. |
 | `007_maps_calls.sql` | Part 7 (version 1.7.0): a pin on the map for each address, the caregiver's position while on the way (seen only by that patient, forgotten when care starts), and private calls between the patient and caregiver of a visit (who may call whom, at most 10 per visit, every call logged). | SQL Editor → New query → paste → Run, after 006. Shows "Maps and calls are ready". Safe to run again. **Run it before uploading 1.7.0.** |
 | `008_launch.sql` | Part 8 (version 1.8.0): support reports from the apps (with photos) and replies from the team, SOS alerts with the location, real figures for the admin Dashboard, Patients and Reports, and the "Try the demo" switch. | SQL Editor → New query → paste → Run, after 007. Shows "Launch functions are ready". Safe to run again. |
+| `009_accounts.sql` | Part 9 (version 1.9.0): two-step sign-in enforced by the database for team members who set it up, family members and addresses with past visits hidden instead of deleted, "Delete my account", phone notifications sent by the database itself (no webhook step), safety tidy-up. | Run after 008. Shows "Account functions are ready". Safe to run again. |
 
 **Phone sign-in for testing:** Authentication → Sign In / Providers → Phone → switch on, and add test numbers with fixed codes (for example `919876543210=123456`). No SMS is sent to test numbers. Real SMS needs DLT registration (India) and an SMS provider.
 
@@ -39,7 +40,7 @@ Every notification the apps show (new request, accepted, on the way, arrived, vi
 1. **Run `006_notifications.sql`.**
 2. **Make the keys** in the admin panel (Settings → Notifications and SMS → Make push keys). Copy both into Edge Functions → Secrets as `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY`, and add `VAPID_SUBJECT` = `mailto:your-support-email`. The private key is shown once and is not saved anywhere else.
 3. **Deploy the function.** Edge Functions → Deploy a new function → Via Editor → name `push` → paste `functions/push/index.ts` → Deploy. In its settings switch OFF "Verify JWT".
-4. **Database webhook.** Database → Webhooks → Create a new hook: table `notifications`, event Insert, type "Supabase Edge Functions", function `push`, method POST.
+4. **Database webhook:** not needed from version 1.9.0 (`009_accounts.sql` makes the database call `push` by itself). Before 1.9.0: Database → Webhooks → Create a new hook: table `notifications`, event Insert, type "Supabase Edge Functions", function `push`, method POST.
 5. **Each person switches it on** in their Profile (the caregiver app also asks on the Jobs screen while online; the patient app while finding a nurse). Android: works in Chrome, best when the app is installed. iPhone: only after "Add to Home Screen" (iOS 16.4 or newer).
 
 The notification arrives as a key and values and is shown in the person's language (`/push-strings.json`, built with the site). A phone that is switched off or unsubscribed is removed automatically. Log out removes the phone's address for that person.
@@ -63,6 +64,12 @@ Remove the test numbers before launch.
 4. Secrets: `EXOTEL_SID`, `EXOTEL_API_KEY`, `EXOTEL_API_TOKEN`, `EXOTEL_CALLER_ID` (the ExoPhone), `EXOTEL_SUBDOMAIN` (`api.exotel.com`, or `api.in.exotel.com` for a Mumbai-region account).
 
 Until the secrets are set, the Call buttons say private calls are coming soon and point to support.
+
+## Accounts and sign-in safety (version 1.9.0)
+
+- **Forgot password (admin):** the admin login has "Forgot password?". For the email link to come back to the admin panel, set once in Supabase → Authentication → URL Configuration: **Site URL** `https://jangasaketh.github.io/nurse-at-home/` and add **Redirect URL** `https://jangasaketh.github.io/nurse-at-home/**`. Supabase's built-in email sender only sends a few emails an hour, and only to people in your Supabase organisation; for other team members set up your own email sender (Authentication → Emails → SMTP, for example Resend or Zoho).
+- **Two-step sign-in (admin):** each team member: "Your sign-in" (top right) → Set up two-step sign-in → scan the QR code with Google Authenticator, Microsoft Authenticator or 1Password → type the code. From then on the team pages need the code. **Lost phone:** an owner runs in the SQL Editor `delete from auth.mfa_factors where user_id = (select id from auth.users where email = 'their@email');` and the person sets it up again.
+- **Delete my account (apps):** Profile → Delete my account. Blocked while a visit is open or money is still due. Deploy `functions/account/index.ts` as `account` (Verify JWT OFF) so the person's files are deleted too.
 
 ## Ready for launch (version 1.8.0)
 

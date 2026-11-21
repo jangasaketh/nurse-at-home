@@ -10,6 +10,20 @@ For every version, these all carry the same number:
 
 ---
 
+## 1.9.0 (21 Nov 2026)
+
+**Accounts and sign-in safety**
+- **Admin "Forgot password?":** a reset link by email; the link opens the admin panel to choose a new password (at least 10 characters). Expired or used links are explained.
+- **Two-step sign-in for the team:** "Your sign-in" (top right of the admin panel) sets up an authenticator app (QR code or key). Once on, signing in also asks for the 6-digit code, and the database itself refuses team data without it. A half-finished sign-in does not survive a reload. Team members can also change their password there.
+- **Delete my account:** Profile → Delete my account in the patient and caregiver apps. Removes name, phone number, family, addresses, emergency contact, documents, bank details and files; keeps payment records without the name; frees the phone number for a new account. Blocked while a visit is open or a payout or cash is still due. New `account` server program removes the person's files.
+- **Removing family members and addresses** that were used for a visit now hides them instead of failing; unused ones are deleted.
+- **Phone notifications** are now handed to the push server program by the database itself (no webhook step). The `push` program is deployed.
+- **Safety tidy-up:** trigger functions cannot be called directly; every database function has a fixed search path (Supabase's security advice).
+- **Keep-alive:** a daily GitHub Action reads the database once so the free Supabase project does not pause (not needed on the Pro plan).
+- Next.js 16.4.5 (the build stopped on a new security warning for 16.4.3). `supabase/009_accounts.sql`, `supabase/functions/account`. New Telugu and Kannada text (`strings-18.ts`).
+
+---
+
 ## 1.8.0 (7 Nov 2026)
 
 **Launch cleanup: everything real when signed in**

@@ -5,6 +5,7 @@
 // The caregiver in the caregiver app (same browser) is read live and changed through lib/admin/link.ts.
 // When the backend exists, replace the load/save here and the actions with API calls.
 
+import { needsCode } from "./security";
 import { pullSettings, pushSettings, type ServerSettings } from "@/lib/settings-sync";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ADMIN_STORAGE_KEY, applyServices, servicesFromPrices } from "@/lib/data";
@@ -241,7 +242,9 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       const client = db("admin");
       const { data } = await client.auth.getSession();
       const member = data.session ? (await client.from("admin_users").select("name, email, role, active").eq("id", data.session.user.id).maybeSingle()).data : null;
-      if (!data.session || !member || !member.active) {
+      // A sign-in that stopped before the 6-digit code does not count.
+      const half = data.session ? await needsCode().catch(() => false) : false;
+      if (!data.session || !member || !member.active || half) {
         await client.auth.signOut().catch(() => {});
         setState((prev) => ({ ...prev, signedIn: false, userId: null }));
         return;
