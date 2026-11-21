@@ -31,7 +31,7 @@ export function jobFromServer(j: Row): Job {
     landmark: str(j.landmark),
     pin: typeof j.lat === "number" && typeof j.lng === "number" ? { lat: j.lat, lng: j.lng } : null,
     cityId: str(j.city_id),
-    distanceKm: -1, // not known until maps (phase 9)
+    distanceKm: typeof j.distance_km === "number" ? j.distance_km : -1, // from the caregiver's start pin to the patient's pin (2.0.0), when both are set
     dateOffset: offsetOf(str(j.date)),
     slot: str(j.slot),
     visits: num(j.visits) || 1,

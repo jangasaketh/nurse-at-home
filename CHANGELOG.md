@@ -10,6 +10,16 @@ For every version, these all carry the same number:
 
 ---
 
+## 2.0.0 (21 Nov 2026)
+
+**Nearest caregivers, receipts, support contacts from the admin panel**
+- **Nearest caregivers:** in Work settings, a caregiver pins where they start from (map, or their current location). A request then goes only to caregivers within their chosen distance of the patient's pin, and the request shows how far it is ("1.3 km away") without revealing the place. Without a pin on either side, the whole city gets it, as before.
+- **Receipts:** Bookings → Past → Receipt opens a receipt for each visit (service, charges, total, how it was paid, refunds), ready to print or save as a PDF. It says clearly that it is a payment receipt, not a tax invoice.
+- **Support contacts:** admin Settings → Support contacts sets the phone, WhatsApp, email and hours shown in Help in both apps. No code change needed.
+- `supabase/011_nearby_receipts.sql`. New Telugu and Kannada text (`strings-19.ts`).
+
+---
+
 ## 1.9.1 (21 Nov 2026)
 
 **Phone notifications switched on, with no keys to copy**

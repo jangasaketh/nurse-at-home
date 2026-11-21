@@ -1,5 +1,6 @@
 "use client";
 
+import { openReceipt } from "@/lib/receipt";
 import { DeleteAccount } from "./DeleteAccount";
 import { useState } from "react";
 import { useApp, type Screen } from "@/lib/store";
@@ -126,6 +127,7 @@ export function BookingsScreen() {
                     </div>
                     <div className="small muted">{tx(v.when)} · {tx(v.who)}</div>
                     <div className="small muted">{t("With {name}", { name: v.by })}</div>
+                    {state.mode === "live" && <ReceiptButton id={v.id} lang={state.lang} />}
                   </div>
                 ))}
               </div>
@@ -336,6 +338,20 @@ export function ProfileScreen() {
         {live && <DeleteAccount app="patient" onDeleted={() => void signOut()} />}
         <div className="tiny muted" style={{ textAlign: "center" }}>{t("Version {v}", { v: process.env.NEXT_PUBLIC_APP_VERSION ?? "" })}</div>
       </div>
+    </div>
+  );
+}
+
+
+/** Bookings → Past: open the receipt for this visit (signed in). */
+function ReceiptButton({ id, lang }: { id: string; lang: string }) {
+  const [state, setState] = useState<"idle" | "busy" | "failed">("idle");
+  return (
+    <div className="row-inline" style={{ gap: 8 }}>
+      <button type="button" className="link-btn small" disabled={state === "busy"} onClick={async () => { setState("busy"); setState((await openReceipt(id, lang)) ? "idle" : "failed"); }}>
+        {state === "busy" ? t("Please wait…") : t("Receipt")}
+      </button>
+      {state === "failed" && <span className="small error" role="alert">{t("Could not open the receipt. Check your internet and try again.")}</span>}
     </div>
   );
 }
