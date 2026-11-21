@@ -38,6 +38,7 @@ export function LaunchPanel() {
     ]);
     const v = (k: string) => (settings.data ?? []).find((r) => r.key === k)?.value as Record<string, unknown> | undefined;
     setDemo(v("demo")?.show !== false);
+    const pushReady = await a.rpc("push_ready").then((r) => r.data === true, () => false);
     const [pay, pushFn, callFn] = await Promise.all([
       functionState("payments", { action: "check" }).catch(() => "unknown" as const),
       functionState("push", {}).catch(() => "unknown" as const),
@@ -51,8 +52,8 @@ export function LaunchPanel() {
       { label: "Database part 8 (support, real figures, this checklist)", ok: !tickets.error && !!v("demo"), how: "Run supabase/008_launch.sql." },
       { label: "Online payment switched on", ok: v("payments")?.enabled === true, how: "Settings → Payments, after the payments function and Razorpay keys are set." },
       { label: "Payments server program deployed with Razorpay keys", ok: fn(pay), how: "Edge Function payments + RAZORPAY_* secrets (supabase/README.md). Use live keys after Razorpay approves the business." },
-      { label: "Push keys made", ok: !!(v("push")?.publicKey), how: "Settings → Notifications and SMS → Make push keys." },
-      { label: "Push server program deployed", ok: fn(pushFn), how: "Edge Function push + VAPID_* secrets + the Database Webhook." },
+      { label: "Push keys made", ok: pushReady, how: "Settings → Notifications and SMS → Make push keys." },
+      { label: "Push server program deployed", ok: fn(pushFn), how: "Edge Function push (supabase/README.md)." },
       { label: "Private calls set up (Exotel)", ok: callFn === "ready" ? true : callFn === "not-set-up" || callFn === "missing" ? false : null, how: "Edge Function call + EXOTEL_* secrets." },
       { label: "“Try the demo” hidden from the login screens", ok: v("demo")?.show === false, how: "Switch it off above when real users start." },
     ]);

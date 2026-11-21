@@ -1,4 +1,4 @@
-// NURSE AT HOME · PUSH SERVER PROGRAM (Supabase Edge Function "push"), version 1.6.0
+// NURSE AT HOME · PUSH SERVER PROGRAM (Supabase Edge Function "push"), version 1.9.1
 //
 // Sends each new notification to the person's phones (Web Push), so it rings even when the app is closed.
 // Called by a Database Webhook on new rows in public.notifications (set up once in the dashboard; see
@@ -7,8 +7,9 @@
 //
 // How to put it live: Supabase → Edge Functions → Deploy a new function → Via editor, name it "push",
 // paste this file, deploy. Switch OFF "Verify JWT" (safe: it only sends notifications that already exist,
-// each once, to their own person; so the database webhook works with any key type). Secrets: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY (made in the
-// admin panel: Settings → Notifications → Make push keys) and VAPID_SUBJECT (mailto:your-support-email).
+// each once, to their own person; so the database call works with any key type). Keys: from 1.9.1 they are
+// made by "push-setup" and read from the database Vault (supabase/010_push_keys.sql); VAPID_PUBLIC_KEY and
+// VAPID_PRIVATE_KEY secrets still work and take priority. VAPID_SUBJECT is optional (who to contact).
 
 type Env = Record<string, string | undefined>;
 
@@ -71,8 +72,7 @@ export async function handle(req: Request, env: Env): Promise<Response> {
   if (req.method !== "POST") return new Response("POST only", { status: 405 });
   const SUPA = (env.SUPABASE_URL ?? "").replace(/\/$/, "");
   const SERVICE = env.SUPABASE_SERVICE_ROLE_KEY ?? env.SERVICE_ROLE_KEY ?? "";
-  const pub = env.VAPID_PUBLIC_KEY ?? "", priv = env.VAPID_PRIVATE_KEY ?? "", subject = env.VAPID_SUBJECT ?? "mailto:support@example.com";
-  if (!SUPA || !SERVICE || !pub || !priv) return new Response(JSON.stringify({ error: "Push is not set up yet" }), { status: 503 });
+  if (!SUPA || !SERVICE) return new Response(JSON.stringify({ error: "Push is not set up yet" }), { status: 503 });
   const headers: Record<string, string> = { apikey: SERVICE, "Content-Type": "application/json" };
   if (SERVICE.startsWith("eyJ")) headers.Authorization = `Bearer ${SERVICE}`;
   const rpc = async (fn: string, args: unknown) => {
@@ -81,6 +81,13 @@ export async function handle(req: Request, env: Env): Promise<Response> {
     if (!r.ok) throw new Error(t);
     return t ? JSON.parse(t) : null;
   };
+  let pub = env.VAPID_PUBLIC_KEY ?? "", priv = env.VAPID_PRIVATE_KEY ?? "";
+  if (!pub || !priv) {
+    const k = await rpc("push_keys", {}).catch(() => null) as { public?: string | null; private?: string | null } | null;
+    pub = k?.public ?? ""; priv = k?.private ?? "";
+  }
+  const subject = env.VAPID_SUBJECT ?? "https://jangasaketh.github.io/nurse-at-home/";
+  if (!pub || !priv) return new Response(JSON.stringify({ error: "Push is not set up yet" }), { status: 503 });
 
   const event = await req.json().catch(() => ({}));
   const id = event?.record?.id ?? event?.id;
