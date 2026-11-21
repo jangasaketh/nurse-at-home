@@ -50,7 +50,9 @@ export function FamilyFormScreen() {
     // Age is needed for family members (the nurse must know who to expect). It is optional for yourself.
     age: (!isSelf && !age) || (age && (ageNumber < 0 || ageNumber > 120)) ? t("Enter an age between 0 and 120.") : undefined,
   };
-  const hasBooking = existing !== null && state.booking?.patient.id === existing.id;
+  // Signed in, a finished visit does not count (it stays in the history; removing the person hides them).
+  const hasBooking = existing !== null && state.booking?.patient.id === existing.id
+    && !["completed", "cancelled", "missed"].includes(state.booking?.live?.status ?? "");
 
   const save = (e: FormEvent) => {
     e.preventDefault();

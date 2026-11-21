@@ -27,17 +27,17 @@ const LANGS: Lang[] = ["en", "te", "kn"];
 /** Read the account from the database after sign-in. */
 export async function pullAccount(userId: string): Promise<PulledAccount> {
   const client = db("patient");
-  const [profile, people, placesWithPins, contact] = await Promise.all([
+  // "*": newer columns (pins from 007, "hidden" from 009) come along when the database has them.
+  const [profile, peopleAll, placesAll, contact] = await Promise.all([
     client.from("profiles").select("full_name, lang, consent_at").eq("id", userId).maybeSingle(),
-    client.from("patient_people").select("id, name, relation, age, gender, created_at").eq("account_id", userId).order("created_at"),
-    client.from("addresses").select("id, label, line, area, city_id, pincode, landmark, lat, lng, created_at").eq("account_id", userId).order("created_at"),
+    client.from("patient_people").select("*").eq("account_id", userId).order("created_at"),
+    client.from("addresses").select("*").eq("account_id", userId).order("created_at"),
     client.from("emergency_contacts").select("name, relation, phone").eq("account_id", userId).maybeSingle(),
   ]);
-  // Before supabase/007_maps_calls.sql is run there are no pins: read the addresses without them.
-  const places = placesWithPins.error?.code === "42703"
-    ? await client.from("addresses").select("id, label, line, area, city_id, pincode, landmark, created_at").eq("account_id", userId).order("created_at")
-    : placesWithPins;
-  for (const r of [profile, people, places, contact]) if (r.error) throw r.error;
+  for (const r of [profile, peopleAll, placesAll, contact]) if (r.error) throw r.error;
+  // Removed people and addresses that were used for a visit stay in the database, hidden.
+  const people = { data: (peopleAll.data ?? []).filter((p) => !p.hidden) };
+  const places = { data: (placesAll.data ?? []).filter((a) => !a.hidden) };
 
   const remoteIds: Record<string, string> = {};
   const patients: Patient[] = (people.data ?? []).map((p) => {
@@ -92,9 +92,14 @@ export async function pushAccount(userId: string, prev: AccountSnapshot | null, 
     if (error) throw error;
   }
   const gonePeople = (prev?.patients ?? []).filter((p) => !next.patients.some((q) => q.id === p.id) && remoteIds[p.id]);
-  if (gonePeople.length) {
-    const { error } = await client.from("patient_people").delete().in("id", gonePeople.map((p) => remoteIds[p.id]));
-    if (error) throw error;
+  const gonePlaces = (prev?.addresses ?? []).filter((a) => !next.addresses.some((b) => b.id === a.id) && remoteIds[a.id]);
+  // Removed: deleted when never used for a visit, otherwise hidden (supabase/009_accounts.sql).
+  if (gonePeople.length || gonePlaces.length) {
+    const { error } = await client.rpc("forget_family", { p_people: gonePeople.map((p) => remoteIds[p.id]), p_places: gonePlaces.map((a) => remoteIds[a.id]) });
+    if (error?.code === "PGRST202") { // before 009 is run
+      if (gonePeople.length) { const r = await client.from("patient_people").delete().in("id", gonePeople.map((p) => remoteIds[p.id])); if (r.error) throw r.error; }
+      if (gonePlaces.length) { const r = await client.from("addresses").delete().in("id", gonePlaces.map((a) => remoteIds[a.id])); if (r.error) throw r.error; }
+    } else if (error) throw error;
   }
 
   // Addresses
@@ -104,11 +109,7 @@ export async function pushAccount(userId: string, prev: AccountSnapshot | null, 
     const { error } = await client.from("addresses").upsert(rows);
     if (error) throw error;
   }
-  const gonePlaces = (prev?.addresses ?? []).filter((a) => !next.addresses.some((b) => b.id === a.id) && remoteIds[a.id]);
-  if (gonePlaces.length) {
-    const { error } = await client.from("addresses").delete().in("id", gonePlaces.map((a) => remoteIds[a.id]));
-    if (error) throw error;
-  }
+
 
   // Emergency contact
   if (!same(prev?.contact ?? null, next.contact)) {

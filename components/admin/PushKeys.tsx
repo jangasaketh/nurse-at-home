@@ -76,7 +76,7 @@ export function PushKeys() {
           Also add <code>VAPID_SUBJECT</code> = <code>mailto:</code> followed by your support email.
         </li>
         <li><b>Deploy the &ldquo;push&rdquo; Edge Function</b> (Edge Functions → Deploy a new function → Via editor → name <code>push</code> → paste <code>supabase/functions/push/index.ts</code> → Deploy), then in its settings switch <b>off</b> &ldquo;Verify JWT&rdquo;.</li>
-        <li><b>Add a Database Webhook</b>: Database → Webhooks → Create: table <code>notifications</code>, event <i>Insert</i>, type <i>Supabase Edge Functions</i>, function <code>push</code>, method POST.</li>
+        <li><b>Database link:</b> done by <code>supabase/009_accounts.sql</code> (no webhook to add).</li>
         <li><b>Test:</b> turn on notifications in the caregiver app (Profile), close the app, and approve or message that caregiver here.</li>
       </ol>
 

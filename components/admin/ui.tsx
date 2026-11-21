@@ -63,16 +63,17 @@ export function Select<T extends string>({ label, value, onChange, options, id }
   );
 }
 
-export function Field({ label, id, value, onChange, type = "text", hint, error, placeholder, multiline, className, min, max, step }: {
+export function Field({ label, id, value, onChange, type = "text", hint, error, placeholder, multiline, className, min, max, step, inputMode, autoComplete }: {
   label: string; id: string; value: string; onChange: (v: string) => void; type?: string; hint?: string; error?: string; placeholder?: string;
   multiline?: boolean; className?: string; min?: number; max?: number; step?: number;
+  inputMode?: "numeric" | "text" | "email"; autoComplete?: string;
 }) {
   return (
     <label className={`afield ${className ?? ""}`} htmlFor={id}>
       <span>{label}</span>
       {multiline
         ? <textarea id={id} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} aria-invalid={!!error} />
-        : <input id={id} type={type} value={value} placeholder={placeholder} min={min} max={max} step={step} onChange={(e) => onChange(e.target.value)} aria-invalid={!!error} />}
+        : <input id={id} type={type} value={value} placeholder={placeholder} min={min} max={max} step={step} inputMode={inputMode} autoComplete={autoComplete} onChange={(e) => onChange(e.target.value)} aria-invalid={!!error} />}
       {hint && <span className="hint">{hint}</span>}
       {error && <span className="err" role="alert">{error}</span>}
     </label>
