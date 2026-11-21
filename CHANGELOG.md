@@ -10,6 +10,15 @@ For every version, these all carry the same number:
 
 ---
 
+## 1.9.1 (21 Nov 2026)
+
+**Phone notifications switched on, with no keys to copy**
+- The push keys are now made inside Supabase by a new `push-setup` server program and kept encrypted in the database Vault. The admin panel's "Make push keys" button does everything; nobody copies a private key anymore.
+- Set up on the live project: keys made, `push` and `push-setup` deployed, and the database hands each new notification to `push`. Patients and caregivers only need to turn on notifications in Profile.
+- Admin Settings → Notifications and SMS and Settings → Launch show the new status. `supabase/010_push_keys.sql`.
+
+---
+
 ## 1.9.0 (21 Nov 2026)
 
 **Accounts and sign-in safety**
