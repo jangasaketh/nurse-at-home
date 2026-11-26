@@ -25,3 +25,24 @@ export function useDemoAllowed(app: AppName) {
   }, [app]);
   return show;
 }
+
+// "Send OTP" on the patient and caregiver login screens (2.2.0). Until SMS codes work for real numbers
+// (DLT and an SMS provider), the owner can hide it so people use Continue with Google. It is hidden only
+// when Google sign-in is switched on, so there is always a way in.
+const PHONE_KEY = "nurse-at-home-phone-signin:v1";
+export function usePhoneSignIn(app: AppName) {
+  const [show, setShow] = useState<boolean>(() => {
+    try { return localStorage.getItem(PHONE_KEY) !== "off"; } catch { return true; }
+  });
+  useEffect(() => {
+    let gone = false;
+    db(app).from("settings").select("value").eq("key", "signin").maybeSingle().then(({ data, error }) => {
+      if (gone || error) return;
+      const on = (data?.value as { phone?: boolean } | null)?.phone !== false;
+      setShow(on);
+      try { localStorage.setItem(PHONE_KEY, on ? "on" : "off"); } catch { /* private mode */ }
+    }, () => {});
+    return () => { gone = true; };
+  }, [app]);
+  return show;
+}

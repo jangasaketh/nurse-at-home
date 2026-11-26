@@ -6,7 +6,47 @@
 import { useEffect, useState } from "react";
 import { finishSetup, setNewPassword, startSetup, turnOff, verifiedFactor } from "@/lib/admin/security";
 import { useAdmin } from "@/lib/admin/store";
+import { disablePush, enablePush, pushState, type PushState } from "@/lib/push";
 import { Badge, Drawer, Field, useToast } from "./ui";
+
+/** SOS alerts on this phone or computer (2.2.0): owners and support get a notification for every SOS. */
+function SosAlerts() {
+  const { state } = useAdmin();
+  const [st, setSt] = useState<PushState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const canGet = state.role === "owner" || state.role === "support";
+  useEffect(() => { void pushState("admin", state.userId).then(setSt, () => setSt("unsupported")); }, [state.userId]);
+  const turn = async (on: boolean) => {
+    if (!state.userId) return;
+    setBusy(true);
+    try { setSt(on ? await enablePush("admin", state.userId, "en") : await disablePush("admin", state.userId)); }
+    catch { setSt("off"); }
+    setBusy(false);
+  };
+  const note: Record<PushState, string> = {
+    on: "This device rings for every SOS, even when the admin panel is closed.",
+    off: "Turn this on, on the phone you keep with you during service hours.",
+    blocked: "Notifications are blocked for this site. Allow them in the browser’s site settings, then try again.",
+    "not-set-up": "Push keys are not made yet (Settings → Notifications and SMS).",
+    unsupported: "This browser cannot show notifications. Use Chrome on Android, or a computer.",
+    "ios-install": "On iPhone: open this page in Safari, Share → Add to Home Screen, open it from there, then turn this on.",
+  };
+  return (
+    <section className="adm-col" style={{ gap: 10 }}>
+      <div className="adm-row" style={{ justifyContent: "space-between" }}>
+        <h3 style={{ margin: 0 }}>SOS alerts on this device</h3>
+        {st && <Badge tone={st === "on" ? "ok" : "warn"}>{st === "on" ? "On" : "Off"}</Badge>}
+      </div>
+      {!canGet ? <p className="adm-small adm-muted" style={{ margin: 0 }}>SOS alerts go to owners and the support team.</p> : (
+        <>
+          <p className="adm-small adm-muted" style={{ margin: 0 }}>When a patient or caregiver presses SOS during a visit, this device gets a notification at once, with the place and their phone number. {st ? note[st] : ""}</p>
+          {st === "on" ? <button type="button" className="abtn" disabled={busy} onClick={() => void turn(false)}>Turn off on this device</button>
+            : (st === "off" || st === "blocked") && <button type="button" className="abtn abtn-primary" disabled={busy} onClick={() => void turn(true)}>Turn on SOS alerts</button>}
+        </>
+      )}
+    </section>
+  );
+}
 
 export function SecurityDrawer({ onClose }: { onClose: () => void }) {
   const { state, log } = useAdmin();
@@ -88,6 +128,8 @@ export function SecurityDrawer({ onClose }: { onClose: () => void }) {
           )}
           {factor && <button type="button" className="abtn" disabled={busy} onClick={() => void off()}>Turn off two-step sign-in</button>}
         </section>
+
+        <SosAlerts />
 
         <section className="adm-col" style={{ gap: 10 }}>
           <h3 style={{ margin: 0 }}>Change your password</h3>

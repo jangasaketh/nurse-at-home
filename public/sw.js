@@ -156,14 +156,17 @@ self.addEventListener("push", (event) => {
       try { data = event.data ? event.data.json() : {}; } catch { data = { title: event.data ? event.data.text() : "" }; }
       const table = await words();
       const caregiver = data.app === "caregiver";
+      const admin = data.app === "admin"; // team members' SOS alerts (2.2.0)
       const title = msgText(data.title, data.lang, table) || "Nurse at Home";
       const body = msgText(data.body, data.lang, table);
       const icon = SCOPE + (caregiver ? "caregiver/icons/icon-192.png" : "icons/icon-192.png");
+      // A new request or an SOS keeps ringing until it is looked at.
+      const loud = data.kind === "request" || data.kind === "sos";
       await self.registration.showNotification(title, {
         body, icon, badge: icon, tag: data.id || undefined, lang: data.lang || "en",
-        // A new request keeps ringing until it is looked at.
-        requireInteraction: data.kind === "request", renotify: !!data.id, vibrate: data.kind === "request" ? [300, 150, 300, 150, 300] : [200],
-        data: { url: SCOPE + (caregiver ? "caregiver/" : ""), target: data.target || null },
+        requireInteraction: loud, renotify: !!data.id,
+        vibrate: data.kind === "sos" ? [600, 200, 600, 200, 600, 200, 600] : loud ? [300, 150, 300, 150, 300] : [200],
+        data: { url: SCOPE + (admin ? "admin/" : caregiver ? "caregiver/" : ""), target: data.target || null },
       });
     })(),
   );
@@ -176,10 +179,10 @@ self.addEventListener("notificationclick", (event) => {
     (async () => {
       const open = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
       // Bring the app forward if it is already open (the caregiver app for caregiver notifications).
-      const caregiverUrl = url.endsWith("caregiver/");
+      const which = (u) => (u.includes("/admin") ? "admin" : u.includes("/caregiver") ? "caregiver" : "patient");
+      const want = which(new URL(url).pathname);
       for (const c of open) {
-        const isCaregiver = new URL(c.url).pathname.includes("/caregiver");
-        if (isCaregiver === caregiverUrl && "focus" in c) {
+        if (which(new URL(c.url).pathname) === want && "focus" in c) {
           c.postMessage({ type: "notification-open", target: event.notification.data && event.notification.data.target });
           return c.focus();
         }

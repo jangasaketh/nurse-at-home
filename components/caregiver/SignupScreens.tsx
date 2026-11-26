@@ -2,12 +2,12 @@
 
 // CAREGIVER APP: sign in, choose a role, and get verified (KYC).
 
-import { useDemoAllowed } from "@/lib/launch";
+import { useDemoAllowed, usePhoneSignIn } from "@/lib/launch";
 import { useEffect, useState, type FormEvent } from "react";
 import { authProblem, db, intlPhone } from "@/lib/supabase";
 import { authMessage } from "../AuthScreens";
 import { GoogleButton } from "../GoogleSignIn";
-import { googleProblem, useGoogleReturn } from "@/lib/google";
+import { googleProblem, useGoogleEnabled, useGoogleReturn } from "@/lib/google";
 import { sendForVerification } from "@/lib/caregiver/sync";
 import { FileGone } from "@/lib/files";
 import { approvalPatch, useCg, KYC_STEPS, type CgState, type KycStep, type Qualification } from "@/lib/caregiver/store";
@@ -61,6 +61,10 @@ export function CgLoginScreen() {
   };
   const demo = () => set({ mode: "demo", userId: null, screen: "otp", trail: [] });
   const demoAllowed = useDemoAllowed("caregiver");
+  // "Send OTP" is hidden only when the owner switched it off AND Google sign-in is on (always a way in).
+  const phoneAllowed = usePhoneSignIn("caregiver");
+  const googleOn = useGoogleEnabled();
+  const showPhone = phoneAllowed || !googleOn;
   return (
     <form className="screen screen-white login" onSubmit={submit} noValidate>
       <div className="row-inline" style={{ gap: 10 }}>
@@ -78,6 +82,7 @@ export function CgLoginScreen() {
         </p>
       </div>
       <div className="stack" style={{ gap: 8 }}>
+        {showPhone && (<>
         <label htmlFor="cg-phone">{t("Mobile number")}</label>
         <div className="field">
           <span className="strong" style={{ fontSize: 18 }}>+91</span>
@@ -85,15 +90,16 @@ export function CgLoginScreen() {
             onChange={(e) => { set({ phone: digits(e.target.value, 10) }); setError(false); }} />
         </div>
         {error && <div role="alert" className="error">{t("Enter a 10-digit mobile number.")}</div>}
-        {problem && <div role="alert" className="error">{problem}</div>}
         <button type="submit" className="btn btn-primary" style={{ marginTop: 8 }} disabled={busy}>{busy ? t("Sending…") : t("Send OTP")}</button>
-        <GoogleButton app="caregiver" path="/caregiver/" onError={setProblem} />
+        </>)}
+        {problem && <div role="alert" className="error">{problem}</div>}
+        <GoogleButton app="caregiver" path="/caregiver/" onError={setProblem} alone={!showPhone} />
         {demoAllowed && <button type="button" className="link-btn small" onClick={demo}>{t("Try the demo (sample data, no account)")}</button>}
       </div>
       <div className="spacer" />
       <div className="stack-sm">
         <a className="link-btn small" href={`${BASE}/`}>{t("Need a nurse at home? Open the patient app")}</a>
-        <p className="tiny muted">{t("Your role and details are saved to your account. Requests, patients and earnings are still examples while we finish the app.")}</p>
+        <p className="tiny muted">{t("Your role and details are saved to your account.")}</p>
       </div>
     </form>
   );

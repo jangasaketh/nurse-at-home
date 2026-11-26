@@ -389,3 +389,4 @@ a.btn-danger-solid { color: #ffffff; }
 .legal-list li { display: flex; flex-direction: column; }
 .legal-list a { color: var(--primary); font-weight: 600; font-size: 18px; }
 .legal-list span { color: var(--muted); }
+.btn-google-main { min-height: 56px; margin-top: 8px; }

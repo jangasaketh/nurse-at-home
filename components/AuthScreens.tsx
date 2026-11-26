@@ -1,6 +1,6 @@
 "use client";
 
-import { useDemoAllowed } from "@/lib/launch";
+import { useDemoAllowed, usePhoneSignIn } from "@/lib/launch";
 import { useEffect, useState, type FormEvent } from "react";
 import { useApp } from "@/lib/store";
 import { SELF } from "@/lib/booking";
@@ -9,7 +9,7 @@ import { LanguageChips } from "./LanguageChips";
 import { Icon } from "./Icon";
 import { CheckRow, Header, TextField } from "./ui";
 import { authProblem, db, intlPhone } from "@/lib/supabase";
-import { googleProblem, useGoogleReturn } from "@/lib/google";
+import { googleProblem, useGoogleEnabled, useGoogleReturn } from "@/lib/google";
 import { GoogleButton } from "./GoogleSignIn";
 
 /** The message for a failed sign-in step, in the app's language. */
@@ -53,6 +53,10 @@ export function LoginScreen() {
   // The demo: sample data, any 6 digits work, nothing is saved to an account.
   const demo = () => set({ mode: "demo", userId: null, screen: "otp", trail: [] });
   const demoAllowed = useDemoAllowed("patient");
+  // "Send OTP" is hidden only when the owner switched it off AND Google sign-in is on (always a way in).
+  const phoneAllowed = usePhoneSignIn("patient");
+  const googleOn = useGoogleEnabled();
+  const showPhone = phoneAllowed || !googleOn;
 
   return (
     <form className="screen screen-white login" onSubmit={submit} noValidate>
@@ -68,6 +72,7 @@ export function LoginScreen() {
         </p>
       </div>
       <div className="stack" style={{ gap: 8 }}>
+        {showPhone && (<>
         <label htmlFor="phone">{t("Mobile number")}</label>
         <div className="field">
           <span className="strong" style={{ fontSize: 18 }}>+91</span>
@@ -81,16 +86,17 @@ export function LoginScreen() {
           />
         </div>
         {error && <div role="alert" className="error">{t("Enter a 10-digit mobile number.")}</div>}
-        {problem && <div role="alert" className="error">{problem}</div>}
         <button type="submit" className="btn btn-primary" style={{ marginTop: 8 }} disabled={busy}>{busy ? t("Sending…") : t("Send OTP")}</button>
-        <GoogleButton app="patient" path="/" onError={setProblem} />
+        </>)}
+        {problem && <div role="alert" className="error">{problem}</div>}
+        <GoogleButton app="patient" path="/" onError={setProblem} alone={!showPhone} />
         {demoAllowed && <button type="button" className="link-btn small" onClick={demo}>{t("Try the demo (sample data, no account)")}</button>}
       </div>
       <div className="spacer" />
       {/* The caregiver app lives on the same site, at /caregiver/. */}
       <a className="link-btn small" href={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/caregiver/`}>{t("Are you a nurse or compounder? Work with us")}</a>
       <a className="link-btn small" href={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/legal/`}>{t("Terms, privacy, refunds and contact")}</a>
-      <p className="tiny muted">{t("Your name, family and addresses are saved to your account. Caregivers, bookings and ratings are still examples while we finish the app.")}</p>
+      <p className="tiny muted">{t("Your name, family and addresses are saved to your account.")}</p>
     </form>
   );
 }

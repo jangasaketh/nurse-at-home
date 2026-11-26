@@ -91,5 +91,6 @@ export async function privateCall(app: AppName, bookingId: string): Promise<Call
   const { error } = await db(app).functions.invoke("call", { body: { booking: bookingId } });
   if (!error) return "calling";
   const status = (error as { context?: Response }).context?.status;
-  return status === 503 ? "not-set-up" : status === 403 || status === 401 ? "not-allowed" : "failed";
+  // 503: the call program has no Exotel keys yet; 404: the call program is not deployed yet.
+  return status === 503 || status === 404 ? "not-set-up" : status === 403 || status === 401 ? "not-allowed" : "failed";
 }
