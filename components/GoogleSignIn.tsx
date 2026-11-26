@@ -21,7 +21,7 @@ function GoogleMark() {
   );
 }
 
-export function GoogleButton({ app, path, onError }: { app: "patient" | "caregiver"; path: string; onError: (message: string) => void }) {
+export function GoogleButton({ app, path, onError, alone = false }: { app: "patient" | "caregiver"; path: string; onError: (message: string) => void; alone?: boolean }) {
   const enabled = useGoogleEnabled();
   const [busy, setBusy] = useState(false);
   if (!enabled) return null;
@@ -32,8 +32,8 @@ export function GoogleButton({ app, path, onError }: { app: "patient" | "caregiv
   };
   return (
     <>
-      <div className="or-line" aria-hidden="true"><span>{t("or")}</span></div>
-      <button type="button" className="btn btn-google" onClick={go} disabled={busy}>
+      {!alone && <div className="or-line" aria-hidden="true"><span>{t("or")}</span></div>}
+      <button type="button" className={`btn btn-google${alone ? " btn-google-main" : ""}`} onClick={go} disabled={busy}>
         <GoogleMark />{busy ? t("Opening Google…") : t("Continue with Google")}
       </button>
     </>

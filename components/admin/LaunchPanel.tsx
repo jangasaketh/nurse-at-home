@@ -25,6 +25,7 @@ export function LaunchPanel() {
   const live = state.mode === "live";
   const toast = useToast();
   const [demo, setDemo] = useState<boolean | null>(null);
+  const [phoneOn, setPhoneOn] = useState<boolean | null>(null);
   const [checks, setChecks] = useState<Check[] | null>(null);
 
   const run = async () => {
@@ -38,6 +39,8 @@ export function LaunchPanel() {
     ]);
     const v = (k: string) => (settings.data ?? []).find((r) => r.key === k)?.value as Record<string, unknown> | undefined;
     setDemo(v("demo")?.show !== false);
+    setPhoneOn(v("signin")?.phone !== false);
+    const sosPhones = await a.rpc("sos_phones").then((r) => (typeof r.data === "number" ? r.data : null), () => null);
     const pushReady = await a.rpc("push_ready").then((r) => r.data === true, () => false);
     const [pay, pushFn, callFn] = await Promise.all([
       functionState("payments", { action: "check" }).catch(() => "unknown" as const),
@@ -55,6 +58,8 @@ export function LaunchPanel() {
       { label: "Push keys made", ok: pushReady, how: "Settings → Notifications and SMS → Make push keys." },
       { label: "Push server program deployed", ok: fn(pushFn), how: "Edge Function push (supabase/README.md)." },
       { label: "Private calls set up (Exotel)", ok: callFn === "ready" ? true : callFn === "not-set-up" || callFn === "missing" ? false : null, how: "Edge Function call + EXOTEL_* secrets." },
+      { label: "SOS alerts reach a team phone", ok: sosPhones === null ? null : sosPhones > 0, how: "Owners and support: open “Your sign-in” (top right) on the phone you keep with you, and turn on SOS alerts. Needs supabase/013_sos_alerts.sql." },
+      { label: "Support phone number set (Help, “Call support”, policy pages)", ok: !!String((v("support") as { phone?: string } | undefined)?.phone ?? "").trim(), how: "Settings → Support contacts." },
       { label: "“Try the demo” hidden from the login screens", ok: v("demo")?.show === false, how: "Switch it off above when real users start." },
     ]);
   };
@@ -72,8 +77,25 @@ export function LaunchPanel() {
     void run();
   };
 
+  const setPhone = async (phone: boolean) => {
+    const before = phoneOn;
+    setPhoneOn(phone);
+    const { error } = await db("admin").from("settings").upsert({ key: "signin", value: { phone } });
+    if (error) { setPhoneOn(before); toast("Could not save. Only an owner can change this."); return; }
+    log(phone ? "Showed phone sign-in (Send OTP) on the login screens" : "Hid phone sign-in (Send OTP) from the login screens", "settings");
+    toast(phone ? "Phone sign-in is shown again." : "Phone sign-in is hidden. People sign in with Google. If Google sign-in is off, phone sign-in still shows, so nobody is locked out.");
+  };
+
   return (
     <div className="adm-col" style={{ gap: 16 }}>
+      <section className="adm-col" style={{ gap: 8 }}>
+        <h3 style={{ margin: 0 }}>Phone sign-in (“Send OTP”) on the login screens</h3>
+        <label className="adm-row" htmlFor="st-phone-signin" style={{ gap: 10 }}>
+          <input id="st-phone-signin" type="checkbox" style={{ width: 18, minHeight: 18 }} checked={phoneOn ?? true} disabled={phoneOn === null} onChange={(e) => void setPhone(e.target.checked)} />
+          <span>Show sign-in with a mobile number and SMS code in the patient and caregiver apps. Switch it off until SMS works for real numbers (DLT and an SMS provider); people then use Continue with Google. It stays visible while Google sign-in is switched off in Supabase.</span>
+        </label>
+      </section>
+
       <section className="adm-col" style={{ gap: 8 }}>
         <h3 style={{ margin: 0 }}>“Try the demo” on the login screens</h3>
         <label className="adm-row" htmlFor="st-demo" style={{ gap: 10 }}>
@@ -107,8 +129,8 @@ export function LaunchPanel() {
           <li><b>Supabase Pro plan</b> (the free plan pauses after a week without use) and daily backups switched on.</li>
           <li><b>Two-step sign-in</b> for every team member (Supabase → Authentication → Multi-Factor), and strong passwords.</li>
           <li><b>Razorpay live keys</b> after business verification; replace the test keys and the webhook in live mode.</li>
-          <li><b>Terms of Use, Privacy Policy, Caregiver Terms</b> written by a lawyer, replacing the placeholder text in the apps.</li>
-          <li><b>Support phone, WhatsApp and email</b>: replace the placeholders (lib/data.ts → SUPPORT).</li>
+          <li><b>Terms of Use, Privacy Policy, Refund policy, Caregiver Terms</b>: the drafts at /legal/ checked by a lawyer.</li>
+          <li><b>Google sign-in</b> switched on in Supabase (Authentication → Providers → Google), steps in supabase/README.md.</li>
           <li><b>Prices, charges and pay split</b> decided and set in Settings.</li>
           <li><b>Telugu and Kannada text</b> checked by native speakers.</li>
           <li><b>Map tiles</b> from a provider (NEXT_PUBLIC_MAP_TILES), and your own domain for the site.</li>

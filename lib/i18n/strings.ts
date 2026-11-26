@@ -20,7 +20,8 @@ import { STRINGS_17 } from "./strings-17"; // 1.8.0: support for real, SOS
 import { STRINGS_18 } from "./strings-18"; // 1.9.0: delete my account
 import { STRINGS_19 } from "./strings-19"; // 2.0.0: nearest caregivers, receipts
 import { STRINGS_20 } from "./strings-20"; // 2.1.0: Continue with Google, legal pages
+import { STRINGS_21 } from "./strings-21"; // 2.2.0: call support, login notes
 
 export const STRINGS: [string, string, string][] = [
-  ...STRINGS_1, ...STRINGS_2, ...STRINGS_3, ...STRINGS_4, ...STRINGS_5, ...STRINGS_6, ...STRINGS_7, ...STRINGS_8, ...STRINGS_9, ...STRINGS_10, ...STRINGS_11, ...STRINGS_12, ...STRINGS_13, ...STRINGS_14, ...STRINGS_15, ...STRINGS_16, ...STRINGS_17, ...STRINGS_18, ...STRINGS_19, ...STRINGS_20,
+  ...STRINGS_1, ...STRINGS_2, ...STRINGS_3, ...STRINGS_4, ...STRINGS_5, ...STRINGS_6, ...STRINGS_7, ...STRINGS_8, ...STRINGS_9, ...STRINGS_10, ...STRINGS_11, ...STRINGS_12, ...STRINGS_13, ...STRINGS_14, ...STRINGS_15, ...STRINGS_16, ...STRINGS_17, ...STRINGS_18, ...STRINGS_19, ...STRINGS_20, ...STRINGS_21,
 ];

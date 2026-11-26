@@ -10,6 +10,18 @@ For every version, these all carry the same number:
 
 ---
 
+## 2.2.0 (26 Nov 2026)
+
+**Ready for a soft launch without SMS or private calls**
+- **Hide phone sign-in:** admin Settings → Launch has a new switch, "Phone sign-in (Send OTP)". When it is off, the patient and caregiver login screens show only Continue with Google. It applies only while Google sign-in is on, so nobody is ever locked out.
+- **Call support:** while private calls through us are not set up, or if a call fails, the visit screen offers a "Call support" button with the number from Settings → Support contacts. The button is in both apps and in the SOS box. A call program that is not deployed now shows "coming soon" instead of an error.
+- **SOS rings the team:** every SOS now also sends a phone notification to each owner and support team member who turned on "SOS alerts on this device". This is in the admin panel under "Your sign-in". The notification keeps ringing until it is looked at, and tapping it opens the admin panel.
+- **Launch checklist:** two new checks, for SOS alerts reaching a team phone and for the support phone being set. The "outside the app" list is updated.
+- Removed the old login-screen note saying bookings were still examples.
+- `supabase/013_sos_alerts.sql` (applied to the live database). New Telugu and Kannada text (`strings-21.ts`).
+
+---
+
 ## 2.1.0 (21 Nov 2026)
 
 **Continue with Google, policy pages, business details**

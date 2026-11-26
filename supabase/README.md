@@ -16,6 +16,7 @@ Project: `https://hglhijvvbbmmsjoakvfz.supabase.co` (region South Asia, Mumbai).
 | `010_push_keys.sql` | Part 10 (version 1.9.1): the push keys are made by the `push-setup` server program and kept encrypted in the Vault; nobody copies keys. | Run after 009. Then deploy `push-setup` (Verify JWT OFF) and press Make push keys in the admin panel. |
 | `011_nearby_receipts.sql` | Part 11 (version 2.0.0): requests go only to caregivers within their distance (when both pins are set), caregivers see how far a request is, and patients get receipts. | Run after 010. If 004, 005 or 007 are ever run again, run 011 after them (it replaces two of their functions). |
 | `012_google.sql` | Part 12 (version 2.1.0): Continue with Google. New accounts take the name from Google, Google accounts give a mobile number once (`set_my_phone`), and the apps cannot change the number with a plain update. | Run after 011. |
+| `013_sos_alerts.sql` | Part 13 (version 2.2.0): every SOS also rings the phones of owners and support who turned on "SOS alerts on this device" (admin → Your sign-in). | Run after 012. |
 
 **Phone sign-in for testing:** Authentication → Sign In / Providers → Phone → switch on, and add test numbers with fixed codes (for example `919876543210=123456`). No SMS is sent to test numbers. Real SMS needs DLT registration (India) and an SMS provider.
 

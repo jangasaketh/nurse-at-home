@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { MapBox } from "./MapBox";
 import { SosStatus } from "./SosStatus";
+import { CallSupportButton } from "./CallSupport";
 import { caregiverLocation, kmBetween, privateCall, type CallResult, type CaregiverWhere } from "@/lib/maps";
 import { useServerAction } from "@/lib/fake-api";
 import { awaitingPayment, lookAgain, payAfterVisit, rateVisit } from "@/lib/patient-bookings";
@@ -418,6 +419,7 @@ function LiveTrackingScreen() {
             <SosStatus app="patient" bookingId={live.id} />
             <div className="actions">
               <a className="btn btn-danger-solid" style={{ minHeight: 48, fontSize: 16 }} href="tel:112">{t("Call 112")}</a>
+              <CallSupportButton />
               <button type="button" className="btn btn-outline" onClick={() => open("help")}>{t("Contact support")}</button>
             </div>
           </div>
@@ -641,6 +643,7 @@ function PrivateCallButton({ bookingId, who, name }: { bookingId: string; who: s
     <>
       <button type="button" className="round-btn" aria-label={t("Call caregiver")} disabled={result === "busy"} onClick={call}><Icon name="phone" size={20} /></button>
       {text && <p className="small muted call-note" role="status" style={{ flexBasis: "100%", margin: 0 }}>{text}</p>}
+      {(result === "not-set-up" || result === "failed") && <div style={{ flexBasis: "100%" }}><CallSupportButton /></div>}
     </>
   );
 }

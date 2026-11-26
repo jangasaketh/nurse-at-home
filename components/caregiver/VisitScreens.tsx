@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MapBox } from "../MapBox";
 import { SosStatus } from "../SosStatus";
+import { CallSupportButton } from "../CallSupport";
 import { kmBetween, privateCall, shareLocation, useMyPosition, type CallResult } from "@/lib/maps";
 import { useCg, type ActiveVisit, type Earning, type VisitRecord } from "@/lib/caregiver/store";
 import {
@@ -188,6 +189,7 @@ export function VisitScreen() {
             {live ? <SosStatus app="caregiver" bookingId={job.id} /> : <div className="small">{t("Prototype: in the real app this alerts our support team with your location.")}</div>}
             <div className="actions">
               <a className="btn btn-danger-solid" style={{ minHeight: 48, fontSize: 16 }} href="tel:112">{t("Call 112")}</a>
+              <CallSupportButton />
               <button type="button" className="btn btn-outline" onClick={() => setSos(false)}>{t("I am safe")}</button>
             </div>
           </div>
@@ -233,6 +235,7 @@ export function VisitScreen() {
               <button type="button" className="btn btn-outline" disabled={calling} onClick={callPatient}><Icon name="phone" size={20} />{calling ? t("Calling…") : t("Call")}</button>
             </div>
             {callNote && <p className="small muted" role="status">{callNoteText}</p>}
+            {callNote && live && (callResult === "not-set-up" || callResult === "failed") && <CallSupportButton />}
             <div className="card stack-sm">
               {job.note && <span className="tiny muted strong">{t("From the patient")}</span>}
               {job.note && <span>{live ? job.note : t(job.note)}</span>}
